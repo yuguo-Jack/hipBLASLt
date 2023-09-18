@@ -22,11 +22,9 @@
 #
 ################################################################################
 
-import collections
 import itertools
 import os
 import sys
-import time
 
 from joblib import Parallel, delayed
 
@@ -144,10 +142,8 @@ def ParallelMap(function, objects, message="", enable=True, method=None, maxTask
 
   print("{0}Launching {1} threads{2}...".format(message, threadCount, countMessage))
   sys.stdout.flush()
-  currentTime = time.time()
   rv = mapFunc(function, objects)
-  totalTime = time.time() - currentTime
-  print("{0}Done. ({1:.1f} secs elapsed)".format(message, totalTime))
+  print("{0}Done.".format(message))
   sys.stdout.flush()
   pool.close()
   return rv
@@ -167,8 +163,7 @@ def ParallelMap2(function, objects, message="", enable=True, multiArg=True):
 
   if threadCount <= 1 and globalParameters["ShowProgressBar"]:
     # Provide a progress bar for single-threaded operation.
-    callFunc = lambda args: function(*args) if multiArg else lambda args: function(args)
-    return [callFunc(args) for args in Utils.tqdm(objects, message)]
+    return list(map(function, Utils.tqdm(objects, message)))
 
   countMessage = ""
   try:
@@ -178,13 +173,11 @@ def ParallelMap2(function, objects, message="", enable=True, multiArg=True):
   if message != "": message += ": "
   print("{0}Launching {1} threads{2}...".format(message, threadCount, countMessage))
   sys.stdout.flush()
-  currentTime = time.time()
 
   pcall = pcallWithGlobalParamsMultiArg if multiArg else pcallWithGlobalParamsSingleArg
   pargs = zip(objects, itertools.repeat(globalParameters))
   rv = Parallel(n_jobs=threadCount)(delayed(pcall)(function, a, params) for a, params in pargs)
 
-  totalTime = time.time() - currentTime
-  print("{0}Done. ({1:.1f} secs elapsed)".format(message, totalTime))
+  print("{0}Done.".format(message))
   sys.stdout.flush()
   return rv

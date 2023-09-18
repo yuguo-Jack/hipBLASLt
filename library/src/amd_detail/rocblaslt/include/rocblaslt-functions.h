@@ -114,18 +114,6 @@ rocblaslt_status rocblaslt_matmul(rocblaslt_handle             handle,
                                   void*                        workspace,
                                   size_t                       workspaceSizeInBytes,
                                   hipStream_t                  stream);
-
-rocblaslt_status rocblaslt_matrix_transform(rocblaslt_handle handle,
-                                            rocblaslt_matrix_transform_desc *transformDesc,
-                                            const void* alpha, /* host or device pointer */
-                                            const void* A,
-                                            rocblaslt_matrix_layout Adesc,
-                                            const void* beta, /* host or device pointer */
-                                            const void* B,
-                                            rocblaslt_matrix_layout Bdesc,
-                                            void* C,
-                                            rocblaslt_matrix_layout Cdesc,
-                                            hipStream_t stream);
 #ifdef __cplusplus
 }
 
@@ -201,34 +189,13 @@ rocblaslt_status rocblaslt_makeArgument_cpp(rocblaslt_handle             handle,
                                             const rocblaslt::RocGemmType gemmType,
                                             const rocblaslt_matmul_algo& algo,
                                             void*                        workspace,
-                                            bool                         useUserArgs,
                                             hipStream_t                  stream,
                                             std::shared_ptr<void>        gemmData);
-
-rocblaslt_status rocblaslt_get_default_user_args(rocblaslt_handle       handle,
-                                                 rocblaslt::RocGemmType gemmType,
-                                                 std::shared_ptr<void>  gemmData,
-                                                 void*                  hostDeviceUserArgs);
 
 rocblaslt_status rocblaslt_run_cpp(rocblaslt_handle       handle,
                                    rocblaslt::RocGemmType gemmType,
                                    std::shared_ptr<void>  gemmData,
                                    hipStream_t            stream);
-
-rocblaslt_status rocblaslt_run_user_args_cpp(rocblaslt_handle       handle,
-                                             rocblaslt::RocGemmType gemmType,
-                                             std::shared_ptr<void>  gemmData,
-                                             void*                  deviceUserArgs,
-                                             hipStream_t            stream);
-
-rocblaslt_status rocblaslt_run_user_args_cpp(rocblaslt_handle             handle,
-                                             rocblaslt::RocGemmType       gemmType,
-                                             size_t                       gemmCount,
-                                             std::shared_ptr<void>        gemmData,
-                                             const rocblaslt_matmul_algo& algo,
-                                             void*                        deviceUserArgs,
-                                             void*                        workspace,
-                                             hipStream_t                  stream);
 
 #endif
 

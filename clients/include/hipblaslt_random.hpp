@@ -2,7 +2,7 @@
  *
  * MIT License
  *
- * Copyright (C) 2022-2023 Advanced Micro Devices, Inc.
+ * Copyright (C) 2022 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -123,30 +123,6 @@ public:
     {
         return random_nan_data<hip_bfloat16, uint16_t, 7, 8>();
     }
-
-    // Single NaN float8...
-    explicit operator hipblaslt_f8()
-    {
-        union
-        {
-            uint8_t      bits;
-            hipblaslt_f8 value;
-        } x;
-        x.bits = 0x80;
-        return x.value;
-    }
-
-    // Single NaN bfloat8...
-    explicit operator hipblaslt_bf8()
-    {
-        union
-        {
-            uint8_t       bits;
-            hipblaslt_bf8 value;
-        } x;
-        x.bits = 0x80;
-        return x.value;
-    }
 };
 
 /* ============================================================================================ */
@@ -231,13 +207,6 @@ inline T random_generator()
     return T(hipblaslt_uniform_int_1_10());
 }
 
-/*! \brief  generate a random number in range [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.10] */
-template <typename T>
-inline T random_generator_small()
-{
-    return T(hipblaslt_uniform_int_1_10() / 10.f);
-}
-
 template <>
 inline float random_generator()
 {
@@ -288,16 +257,6 @@ inline void random_run_generator(T* ptr, size_t num)
     }
 }
 
-/*! \brief  generate a sequence of random number in range [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.10] */
-template <typename T>
-inline void random_run_generator_small(T* ptr, size_t num)
-{
-    for(size_t i = 0; i < num; i++)
-    {
-        ptr[i] = random_generator<T>() / 10.f;
-    }
-}
-
 template <>
 inline void random_run_generator<float>(float* ptr, size_t num)
 {
@@ -316,7 +275,7 @@ inline void random_run_generator<double>(double* ptr, size_t num)
 template <typename T>
 inline T random_hpl_generator()
 {
-    return static_cast<T>(std::uniform_real_distribution<double>(-0.5, 0.5)(t_hipblaslt_rng));
+    return std::uniform_real_distribution<double>(-0.5, 0.5)(t_hipblaslt_rng);
 }
 
 /*! \brief  generate a random number in [-1.0,1.0] doubles  */

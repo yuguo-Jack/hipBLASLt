@@ -109,9 +109,7 @@ namespace Tensile
                 ("e-type",                   po::value<DataType>()->default_value(DataType::None), "E data type")
                 ("alpha-type",               po::value<DataType>()->default_value(DataType::None), "alpha data type")
                 ("beta-type",                po::value<DataType>()->default_value(DataType::None), "beta data type")
-                ("compute-input-type",       po::value<DataType>()->default_value(DataType::None), "compute input data type")
                 ("f32-xdl-math-op",          po::value<DataType>()->default_value(DataType::None), "Use xf32 compute for float input and output matrices.")
-                ("activation-compute-type",  po::value<DataType>()->default_value(DataType::None), "Activation compute type.")
                 ("high-precision-accumulate", po::value<bool>()->default_value(false), "Use high-precision accumulate.")
                 ("sparse-a",                 po::value<bool>()->default_value(false), "A matrix is sparse matrix.")
                 ("strided-batched",          po::value<bool>()->default_value(true), "Use strided-batched or general batched")
@@ -129,11 +127,7 @@ namespace Tensile
                 ("init-alpha",               po::value<InitMode>()->default_value(InitMode::Two), "Initialization for alpha")
                 ("init-beta",                po::value<InitMode>()->default_value(InitMode::Two), "Initialization for beta")
                 ("init-bias",                po::value<InitMode>()->default_value(InitMode::One), "Initialization for bias")
-                ("init-scaleA",              po::value<InitMode>()->default_value(InitMode::Two), "Initialization for scaleA")
-                ("init-scaleB",              po::value<InitMode>()->default_value(InitMode::Two), "Initialization for scaleB")
-                ("init-scaleC",              po::value<InitMode>()->default_value(InitMode::Two), "Initialization for scaleC")
-                ("init-scaleD",              po::value<InitMode>()->default_value(InitMode::Two), "Initialization for scaleD")
-                ("init-scaleAlphaVec",           po::value<InitMode>()->default_value(InitMode::One), "Initialization for scaleAlphaVec")
+                ("init-scaleDVec",           po::value<InitMode>()->default_value(InitMode::One), "Initialization for scaleDVec")
                 ("pristine-on-gpu",          po::value<bool>()->default_value(true), "Keep a pristine copy of inputs on GPU for performance")
                 ("c-equal-d",                po::value<bool>()->default_value(false), "C equals D")
                 ("offset-a",                 po::value<size_t>()->default_value(0), "buffer a start offset")
@@ -156,7 +150,6 @@ namespace Tensile
                 ("print-tensor-c",           po::value<bool>()->default_value(false), "Print tensor C.")
                 ("print-tensor-d",           po::value<bool>()->default_value(false), "Print tensor D.")
                 ("print-tensor-ref",         po::value<bool>()->default_value(false), "Print reference tensor D.")
-                ("print-tensor-bias",         po::value<bool>()->default_value(false), "Print tensor Bias.")
 
                 ("dump-tensors",             po::value<bool>()->default_value(false), "Binary dump tensors instead of printing.")
 
@@ -211,10 +204,7 @@ namespace Tensile
                                                                                   "(prev_dim_stride*prev_dim_size)"
                                                                                   "specifying once applies to all problem sizes, "
                                                                                   "otherwise specify once per problem size.")
-                ("bias-strides",             vector_default_empty<std::string>(), "Unspecified means default stride "
-                                                                                  "(prev_dim_stride*prev_dim_size)"
-                                                                                  "specifying once applies to all problem sizes, "
-                                                                                  "otherwise specify once per problem size.")
+
                 ("problem-start-idx",        po::value<int>()->default_value(0),  "First problem to run")
                 ("num-problems",             po::value<int>()->default_value(-1), "Number of problems to run")
 
@@ -247,13 +237,10 @@ namespace Tensile
                 ("activation-enum-args",      po::value<std::vector<ActivationType>>()->default_value(std::vector<ActivationType>(1, ActivationType::None), "[]"), "Activation enum argument.")
                 ("use-bias",                  po::value<bool>()->default_value(false), "Use bias.")
                 ("bias-source",               po::value<int>()->default_value(3), "Bias source.")
-                ("use-scaleAB",               po::value<bool>()->default_value(false), "Use scaleAB.")
-                ("use-scaleCD",               po::value<bool>()->default_value(false), "Use scaleCD.")
-                ("use-scaleAlphaVec",         po::value<bool>()->default_value(false), "Use scaleAlphaVec.")
+                ("use-scaleDVec",                po::value<bool>()->default_value(false), "Use scaleDVec.")
                 ("bias-type-args",            po::value<std::vector<DataType>>()->default_value(std::vector<DataType>(1, DataType::None), "[]"), "Bias data type args.")
                 ("use-e",                     po::value<bool>()->default_value(false), "Use E.")
                 ("use-gradient",              po::value<bool>()->default_value(false), "Use gradient.")
-                ("use-user-args",             po::value<bool>()->default_value(false), "Use user argument structure as kernel input.")
                 ;
             // clang-format on
 
@@ -454,7 +441,6 @@ namespace Tensile
             parse_arg_ints(args, "c-strides");
             parse_arg_ints(args, "d-strides");
             parse_arg_ints(args, "e-strides");
-            parse_arg_ints(args, "bias-strides");
             parse_bias_type_args(args, "bias-type-args");
             parse_activation_int(args, "activation-type");
             parse_activation_enum_args(args, "activation-enum-args");
@@ -571,10 +557,6 @@ int main(int argc, const char* argv[])
 
     reporters->report(ResultKey::ProblemCount, problemFactory.problems().size());
 
-    bool  useUserArgs = args["use-user-args"].as<bool>();
-    void* dUA         = nullptr;
-    void* dUAHost     = nullptr;
-
     while(listeners.needMoreBenchmarkRuns())
     {
         listeners.preBenchmarkRun();
@@ -604,18 +586,7 @@ int main(int argc, const char* argv[])
                         {
                             auto inputs = dataInit->prepareGPUInputs(problem);
 
-                            auto kernels
-                                = useUserArgs
-                                      ? solution->solveTensileGPU((*problem),
-                                                                  *inputs,
-                                                                  *hardware,
-                                                                  &dUA,
-                                                                  &dUAHost,
-                                                                  nullptr,
-                                                                  0,
-                                                                  stream)
-                                      : solution->solve(
-                                          (*problem), *inputs, *hardware, nullptr, 0, stream);
+                            auto kernels = solution->solve((*problem), *inputs, *hardware, stream);
 
                             size_t       warmupInvocations = listeners.numWarmupRuns();
                             size_t       eventCount        = gpuTimer ? kernels.size() : 0;
@@ -663,11 +634,6 @@ int main(int argc, const char* argv[])
                             }
 
                             listeners.postSyncs();
-
-                            if(useUserArgs)
-                            {
-                                solution->relaseDeviceUserArgs(dUA, dUAHost);
-                            }
                         }
                     }
                     catch(std::runtime_error const& err)

@@ -35,7 +35,7 @@ import shlex
 import shutil
 from enum import Enum
 
-from .Contractions import FreeIndex, BatchIndex
+from .Contractions import FreeIndex
 from .Contractions import ProblemType as ContractionsProblemType
 
 class DataInitName(Enum):
@@ -110,26 +110,8 @@ def main( config ):
     functions.append((scheduleName, problemType))
     functionNames.append("tensile_%s" % (problemType))
     problemSizes = ProblemSizesMock(exactLogic)
-    if len(problemType["BiasDataTypeList"]) > 0:
-      biasTypeArgs = BiasTypeArgs(problemType, [problemType["BiasDataTypeList"][0]])
-    else:
-      biasTypeArgs = ""
-
-    activationEnums = [[{'Enum': 'relu'}]]
-
-    # Reading the activation args from the LibraryClient section in the config YAML.
-    # Example: enable relu and gelu activation and using none to run without activation
-    #    LibraryClient:
-    #      - ActivationArgs:
-    #        - [Enum: none]
-    #        - [Enum: gelu]
-    #        - [Enum: relu]
-    if len(config) > 0:
-      for lc in config[0:]:
-        if "ActivationArgs" in lc:
-          activationEnums = lc["ActivationArgs"]
-          break
-    activationArgs = ActivationArgs(problemType, activationEnums) if problemType["ActivationType"] == 'all' else ""
+    biasTypeArgs   = BiasTypeArgs(problemType, [problemType["DataType"]])
+    activationArgs = ActivationArgs(problemType, [[{'Enum': 'relu'}]]) if problemType["ActivationType"] == 'all' else ""
     clientParametersPaths.append(writeClientConfig(
                                   forBenchmark=False,
                                   solutions=None,
@@ -430,18 +412,6 @@ def problemSizeParams(problemType, problem):
       rv.append(('d-strides', ",".join(map(str, dstrides))))
       if problemType.useE:
           rv.append(('e-strides', ",".join(map(str, dstrides))))
-    if problemType.useBias:
-      biasstrides = [1, problem.sizes[0], 0]
-      for sc in problemType.setConstStrideBias:
-        index = problemType.indices[sc[0]]
-        if type(index) == BatchIndex:
-            biasstrides[2] = sc[1]
-      if biasstrides[2] == -1:
-        biasstrides[2] = problem.sizes[0]
-      elif biasstrides[2] != 0 and biasstrides[2] < problem.sizes[0]:
-        raise RuntimeError("problem-specified bias stride(%u) must >= M (%u)" % \
-              (biasstrides[2], problem.sizes[0]))
-      rv.append(('bias-strides', ",".join(map(str, biasstrides))))
 
     return rv
 
@@ -454,11 +424,7 @@ def dataInitParams(problemType):
     initAlpha = globalParameters['DataInitTypeAlpha']
     initBeta  = globalParameters['DataInitTypeBeta']
     initBias  = globalParameters['DataInitTypeBias']
-    initScaleA  = globalParameters['DataInitTypeScaleA']
-    initScaleB  = globalParameters['DataInitTypeScaleB']
-    initScaleC  = globalParameters['DataInitTypeScaleC']
-    initScaleD  = globalParameters['DataInitTypeScaleD']
-    initScaleAlphaVec  = globalParameters['DataInitTypeScaleAlphaVec']
+    initScaleDVec  = globalParameters['DataInitTypeScaleDVec']
 
     if not problemType.useBeta:
         initBeta = 0
@@ -466,19 +432,15 @@ def dataInitParams(problemType):
     if initA == -1: initA = globalParameters['DataInitTypeAB']
     if initB == -1: initB = globalParameters['DataInitTypeAB']
 
-    return [('init-a',             DataInitName(initA).name),
-            ('init-b',             DataInitName(initB).name),
-            ('init-c',             DataInitName(initC).name),
-            ('init-d',             DataInitName(initD).name),
-            ('init-e',             DataInitName(initE).name),
-            ('init-alpha',         DataInitName(initAlpha).name),
-            ('init-beta',          DataInitName(initBeta).name),
-            ('init-bias',          DataInitName(initBias).name),
-            ('init-scaleA',        DataInitName(initScaleA).name),
-            ('init-scaleB',        DataInitName(initScaleB).name),
-            ('init-scaleC',        DataInitName(initScaleC).name),
-            ('init-scaleD',        DataInitName(initScaleD).name),
-            ('init-scaleAlphaVec', DataInitName(initScaleAlphaVec).name)]
+    return [('init-a',            DataInitName(initA).name),
+            ('init-b',            DataInitName(initB).name),
+            ('init-c',            DataInitName(initC).name),
+            ('init-d',            DataInitName(initD).name),
+            ('init-e',            DataInitName(initE).name),
+            ('init-alpha',        DataInitName(initAlpha).name),
+            ('init-beta',         DataInitName(initBeta).name),
+            ('init-bias',         DataInitName(initBias).name),
+            ('init-scaleDVec',         DataInitName(initScaleDVec).name)]
 
 def boundsCheckName(mode):
     if mode == 0: return 'Disable'
@@ -515,7 +477,6 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
         param('results-file', resultsFileName)
         param('performance-metric', globalParameters["PerformanceMetric"])
         param('problem-identifier', problemType.operationIdentifier)
-        param('compute-input-type', problemType.computeInputType.toEnum())
         param('a-type',     problemType.aType.toEnum())
         param('b-type',     problemType.bType.toEnum())
         param('c-type',     problemType.cType.toEnum())
@@ -525,14 +486,11 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
         param('alpha-type', problemType.alphaType.toEnum())
         param('beta-type',  problemType.betaType.toEnum())
         param('f32-xdl-math-op', problemType.f32XdlMathOp.toEnum())
-        param('activation-compute-type', problemType.activationComputeDataType.toEnum())
         param('use-gradient', problemType.useGradient)
         param('use-bias',   problemType.useBias)
         param('bias-source',   problemType.biasSrcWhiteList[0])
         param('use-e', problemType.useE)
-        param('use-scaleAB',   problemType.useScaleAB)
-        param('use-scaleCD',   problemType.useScaleCD)
-        param('use-scaleAlphaVec',   problemType.useScaleAlphaVec)
+        param('use-scaleDVec',   problemType.useScaleDVec)
         if biasTypeArgs:
           for btype in biasTypeArgs.biasTypes:
             param('bias-type-args',  btype.toEnum())
@@ -549,6 +507,7 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
           for setting in activationArgs.settingList:
             param('activation-enum-args', setting.activationEnum.toEnum())
         param('activation-type', problemType.activationType.toEnum())
+        param('activation-hpa', problemType.activationHPA)
         param('activation-no-guard', problemType.activationNoGuard)
         if globalParameters["DataInitValueActivationArgs"]:
           param('activation-additional-args', ','.join(map(str, globalParameters["DataInitValueActivationArgs"])))
@@ -572,8 +531,6 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
           param("print-tensor-d",         1)
         if globalParameters["PrintTensorRef"]:
           param("print-tensor-ref",       1)
-        if globalParameters["PrintTensorBias"]:
-          param("print-tensor-bias",      1)
         if globalParameters["DumpTensors"]:
           param("dump-tensors",           1)
         if globalParameters["ExitOnFails"] > 1:
@@ -607,8 +564,6 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, activationArgs, problemType
 
         param("library-update-file",      globalParameters["LibraryUpdateFile"])
         param("library-update-comment",   globalParameters["LibraryUpdateComment"])
-
-        param("use-user-args",            globalParameters["UseUserArgs"])
 
 
 def writeClientConfig(forBenchmark, solutions, problemSizes, biasTypeArgs, activationArgs, stepName, stepBaseDir, newLibrary, codeObjectFiles, tileAwareSelection, configBase = "ClientParameters", libraryFile = None):

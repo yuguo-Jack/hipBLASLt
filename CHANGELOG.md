@@ -1,14 +1,5 @@
 # Change Log for hipBLASLt
 
-## (Unreleased) hipBLASLt 0.6.0
-### Added
-- Add UserArguments for GroupedGemm
-- Support datatype: fp16 in with fp32 out
-- Add samples
-### Changed
-- Replace hipblasDatatype_t with hipblasltDatatype_t
-- Deprecate HIPBLASLT_MATMUL_DESC_D_SCALE_VECTOR_POINTER
-
 ## (Unreleased) hipBLASLt 0.3.0
 ### Added
 - Add getAllAlgos extension APIs
@@ -26,7 +17,7 @@
 - GroupGemm support GSU kernel
 - Add grouped gemm tuning for aldebaran
 
-## hipBLASLt 0.2.0
+## (Unreleased) hipBLASLt 0.2.0
 ### Added
 - Added CI tests for tensilelite
 - Initilized extension group gemm APIs (FP16 only)

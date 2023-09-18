@@ -59,16 +59,6 @@ namespace Tensile
         }
 
         template <>
-        inline bool AlmostEqual(Float8 a, Float8 b)
-        {
-            Float8 absA    = (a > static_cast<Float8>(0.0f)) ? a : static_cast<Float8>(0.0f) - a;
-            Float8 absB    = (b > static_cast<Float8>(0.0f)) ? b : static_cast<Float8>(0.0f) - b;
-            Float8 absDiff = (a - b > static_cast<Float8>(0.0f)) ? a - b : b - a;
-            return absDiff / (absA + absB + static_cast<Float8>(1.0f)) < static_cast<Float8>(
-                       0.125f); // tolerance * eps = 2 * 0.0625; 2*eps needed for SR
-        }
-
-        template <>
         inline bool AlmostEqual(BFloat16 a, BFloat16 b)
         {
             BFloat16 absA = (a > static_cast<BFloat16>(0.0f)) ? a : static_cast<BFloat16>(0.0f) - a;

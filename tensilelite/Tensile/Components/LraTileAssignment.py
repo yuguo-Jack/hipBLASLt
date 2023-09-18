@@ -48,6 +48,7 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         module.addComment0("lr%s" % tP["tileChar"])
 
         # alloc vgpr
+        wReg    = writer.vgprPool.checkOut(1,"wReg") # quotient
         tReg    = writer.vgprPool.checkOut(1,"tReg") # remainder
         kReg    = writer.vgprPool.checkOut(1,"kReg") # remainder
         tmpVgpr = writer.vgprPool.checkOutAligned(2,2,"tmpVgpr")
@@ -56,16 +57,23 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         ldsVgpr1 = writer.vgprPool.checkOut(1,"ldsVgpr1")
         dummy   = writer.vgprPool.checkOut(1,"dummy")
 
-        isMfma = writer.states.asmCaps["HasMFMA"]
-
         # get constant parameter
         tc               = tP["tensorChar"]
         tile01           = tP["tile01Idx"]
         waveWidth        = writer.states.kernel["WavefrontSize"]
-        inputPerThread   = kernel["LocalReadVectorWidth"] if not writer.states.inTailLoop else kernel["MIInputPerThread%s"%tc]
+        inputPerThread   = max(writer.states.lrvwA,writer.states.lrvwB)
+
         if kernel["ProblemType"]["SparseA"]:
           inputPerThread = inputPerThread // (2 if tP["isA"] else 8 if tP["isM"] else 1)
+
+        if kernel["DirectToVgprA"]:
+          # DirectToVgprA case, ignore lrvwA
+          inputPerThread = writer.states.lrvwB
+        elif kernel["DirectToVgprB"]:
+          # DirectToVgprB case, ignore lrvwB
+          inputPerThread = writer.states.lrvwA
         LdsPad           = kernel["LdsPad%s" % tc] if kernel["LdsBlockSizePerPad%s" % tc] == 0 else 0
+        depthULds        = kernel["_DepthULds%s" % tc]
 
         # parameter for get each type index
         dividendForKId   = kernel["MatrixInstM"] * kernel["MatrixInstB"]
@@ -76,7 +84,12 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         else:
             dividedForBlkId  = (kernel["MatrixInstN"] * kernel["MatrixInstBN"]) if (tile01 == 0) else kernel["MatrixInstN"]
         dividedForWaveId = waveWidth if (tile01 == 0) else (waveWidth * kernel["MIWaveGroup"][0])
-        vectorWidth      = kernel["VectorWidth%s"%tc]
+        vectorWidth      = kernel["VectorWidth"] if ((tile01 == 0) and kernel["SourceSwap"]) else 1 # TODO: nonSwap VectorWidth
+        if kernel["allowLRVWforTLUandMI"]:
+          lrvw = writer.states.lrvwA if tP["isA"] else writer.states.lrvwB if tP["isB"] else writer.states.lrvwM
+          if lrvw > 1:
+            vectorWidth = lrvw
+          inputPerThread = 1
         maxKId = waveWidth // ((kernel["MatrixInstM"] if (tile01 == 0) else kernel["MatrixInstN"]) * kernel["MatrixInstB"])
         writer.states.lraTileProperties[tile01] = LraTilePropertiesMFMA(dividendForKId=dividendForKId, \
                                                                         num1DBlocks=num1DBlocks, \
@@ -89,7 +102,7 @@ class LraTileAssignmentMFMA(LraTileAssignment):
         # strider for each type of index
         umlds            = kernel["UnrollMajorLDS%s" % tc]
         mt               = kernel["MacroTile%u" % tile01]
-        strideTile       = kernel["_DepthU%s"%tc] + LdsPad if umlds else 1
+        strideTile       = depthULds + LdsPad if umlds else 1
         strideK          = inputPerThread if umlds else (mt + LdsPad) * inputPerThread
         strideBlock      = kernel["MatrixInstM"] * strideTile
         strideWave       = kernel["MatrixInstM"] * num1DBlocks * strideTile * vectorWidth
@@ -103,41 +116,40 @@ class LraTileAssignmentMFMA(LraTileAssignment):
             module.add(staticMultiply(vgpr(tReg), vgpr(tReg), strideTile, tmpSgprInfo, \
                 "1. N offset: nOffset = nIdx * nStride(%u)" % strideTile))
             # block offset
-            module.add(vectorStaticDivide(kReg, kReg, dividedForBlkId, tmpVgprRes, \
+            module.add(vectorStaticDivide(wReg, kReg, dividedForBlkId, tmpVgprRes, \
                 "2. block offset: bnIdx = wtid / dividedForBlkId(%u)" % dividedForBlkId))
-            module.add(vectorStaticRemainder(dummy, kReg, kReg, num1DBlocks, tmpVgprRes, tmpSgprInfo, \
+            module.add(vectorStaticRemainder(dummy, wReg, wReg, num1DBlocks, tmpVgprRes, tmpSgprInfo, \
                 "2. block offset: bnIdx = bnIdx %% num1DBlocks(%u)" % num1DBlocks))
-            module.add(staticMultiply(vgpr(kReg), vgpr(kReg), strideBlock, tmpSgprInfo, \
+            module.add(staticMultiply(vgpr(wReg), vgpr(wReg), strideBlock, tmpSgprInfo, \
                 "2. block offset: bnOffset = bnIdx * strideBlock(%u)" % strideBlock))
-            module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(kReg), src1=vgpr(tReg), \
+            module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(wReg), src1=vgpr(tReg), \
                 comment="3. add N and block offset: bnOffset = block and N offset"))
             module.add(staticMultiply(vgpr(tReg), vgpr(tReg), vectorWidth, tmpSgprInfo, \
-                "4. apply VectorWidth: bnOffset = bnOffset * vw(%u)" % vectorWidth))
+                "3. apply VectorWidth: bnOffset = bnOffset * vw(%u)" % vectorWidth))
 
             # unroll offset
-            if isMfma and (dividendForKId != waveWidth):
-                module.add(vectorStaticRemainder(dummy, kReg, "Serial", waveWidth, tmpVgprRes, tmpSgprInfo, \
-                "5. thread id in wave: wtid = tid %% wavelength(%u)" % waveWidth))
-                module.add(vectorStaticDivide(kReg, kReg, dividendForKId, tmpVgprRes, \
-                "5. K offset: kIdx = wtid / (MIN(%u) * MIBB(%u))" % (kernel["MatrixInstN"], kernel["MatrixInstB"])))
-                module.add(staticMultiply(vgpr(kReg), vgpr(kReg), strideK, tmpSgprInfo, \
-                "5. K offset: lrKOffset = kIdx * mStride(%u)" % strideK))
-                module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(kReg), src1=vgpr(tReg), \
-                comment="6. offset in wave: lrOffset = bnOffset + lrKOffset"))
+            module.add(vectorStaticDivide(kReg, kReg, dividendForKId, tmpVgprRes, \
+                "4. K offset: kIdx = wtid / (MIN(%u) * MIBB(%u))" % (kernel["MatrixInstN"], kernel["MatrixInstB"])))
+            module.add(staticMultiply(vgpr(kReg), vgpr(kReg), strideK, tmpSgprInfo, \
+                "4. K offset: lrKOffset = kIdx * mStride(%u)" % strideK))
+
+            module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(kReg), src1=vgpr(tReg), \
+                comment="5. offset in wave: lrOffset = bnOffset + lrKOffset"))
 
             # wave offset
             if num1DWaves > 1:
-                module.add(vectorStaticDivide(kReg, "Serial", dividedForWaveId, tmpVgprRes, \
-                    "7. wave offset in N dimen: wtid = tid / dividedForWaveId(%u)" % dividedForWaveId))
-                module.add(vectorStaticRemainder(dummy, kReg, kReg, num1DWaves, tmpVgprRes, tmpSgprInfo, \
-                    "7. wave offset in M dimen: wtid0 = wtid / num1DWaves(%u)" % num1DWaves))
-                module.add(staticMultiply(vgpr(kReg), vgpr(kReg), strideWave, tmpSgprInfo, \
-                    "7. wave offset in M dimen: wOffset = wtid0 * W0Stride(%u)" % strideWave))
-                module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(kReg), src1=vgpr(tReg), \
+                module.add(vectorStaticDivide(wReg, "Serial", dividedForWaveId, tmpVgprRes, \
+                    "6. wave offset in N dimen: wtid = tid / dividedForWaveId(%u)" % dividedForWaveId))
+                module.add(vectorStaticRemainder(dummy, wReg, wReg, num1DWaves, tmpVgprRes, tmpSgprInfo, \
+                    "6. wave offset in M dimen: wtid0 = wtid / num1DWaves(%u)" % num1DWaves))
+                module.add(staticMultiply(vgpr(wReg), vgpr(wReg), strideWave, tmpSgprInfo, \
+                    "6. wave offset in M dimen: wOffset = wtid0 * W0Stride(%u)" % strideWave))
+                module.add(VAddU32(dst=vgpr(tReg), src0=vgpr(wReg), src1=vgpr(tReg), \
                     comment="7. final local read offset: flrOffset = lrOffset + WOffset"))
 
         # release register
         tP["gpr"]["lro"] = tReg
+        writer.vgprPool.checkIn(wReg)
         writer.vgprPool.checkIn(kReg)
         writer.vgprPool.checkIn(tmpVgpr)
         writer.vgprPool.checkIn(ldsVgpr)

@@ -77,8 +77,8 @@ namespace Tensile
             m_problem = problem;
         }
 
-        bool SolutionIterator::checkSolution(ContractionSolution&    solution,
-                                             ContractionProblemGemm& problem)
+        bool SolutionIterator::checkSolution(ContractionSolution const& solution,
+                                             ContractionProblemGemm&    problem)
         {
             if(!(*solution.hardwarePredicate)(*m_hardware))
             {
@@ -109,25 +109,16 @@ namespace Tensile
 
                 return false;
             }
-
-            if(solution.requiredHostWorkspaceSizePerProblem == static_cast<size_t>(-1))
-            {
-                solution.requiredHostWorkspaceSizePerProblem
-                    = solution.requiredHostSizeGroupedGemmSingle(problem);
-            }
             return true;
         }
 
-        bool SolutionIterator::checkSolution(ContractionSolution& solution)
+        bool SolutionIterator::checkSolution(ContractionSolution const& solution)
         {
             if(auto problems = dynamic_cast<ContractionProblemGroupedGemm*>(m_problem))
             {
                 for(int idx = 0; idx < problems->gemms.size(); idx++)
                 {
-                    size_t ws      = solution.requiredWorkspaceSizeGroupedGemm(problems->gemms);
-                    auto&  problem = problems->gemms[idx];
-                    problem.setWorkspaceSizeGroupedGemm(ws);
-                    if(!checkSolution(solution, problem))
+                    if(!checkSolution(solution, problems->gemms[idx]))
                         return false;
                 }
             }

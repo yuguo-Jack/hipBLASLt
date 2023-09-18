@@ -28,7 +28,7 @@ from . import __version__
 from . import Common
 from . import SolutionLibrary
 
-from typing import NamedTuple, List
+from typing import NamedTuple
 
 try:
     import yaml
@@ -101,10 +101,6 @@ def writeSolutions(filename, problemSizes, biasTypeArgs, activationArgs, solutio
             solutionState["ProblemType"] = solutionState["ProblemType"].state
             solutionState["ProblemType"]["DataType"] = \
                     solutionState["ProblemType"]["DataType"].value
-            solutionState["ProblemType"]["DataTypeA"] = \
-                    solutionState["ProblemType"]["DataTypeA"].value
-            solutionState["ProblemType"]["DataTypeB"] = \
-                    solutionState["ProblemType"]["DataTypeB"].value
             solutionState["ProblemType"]["DestDataType"] = \
                     solutionState["ProblemType"]["DestDataType"].value
             solutionState["ProblemType"]["ComputeDataType"] = \
@@ -203,17 +199,17 @@ def parseLibraryLogicFile(filename, archs=None):
 
 def parseLibraryLogicData(data, srcFile="?", archs=None):
     """Parses the data of a library logic file."""
-    if isinstance(data, List):
+    if type(data) is list:
         data = parseLibraryLogicList(data, srcFile)
 
     is_arch_valid = lambda cArch, tArch : (cArch == tArch or cArch == "all")
-    if not (archs is None) and "ArchitectureName" in data:
-        if isinstance(archs, List):
+    if not (archs == None) and "ArchitectureName" in data:
+        if type(archs) is list:
             if len(archs) > 0 and not archs[0] == "all":
                 if not (any(is_arch_valid(arch.split(":")[0], data["ArchitectureName"]) for arch in archs)):
                     return LibraryLogic("", "", None, [], [], None)
-        elif isinstance(archs, str):
-            if not is_arch_valid(archs.split(":")[0], data["ArchitectureName"]):
+        elif type(archs) is str:
+            if not is_arch_valid(arch.split(":")[0], data["ArchitectureName"]):
                 return LibraryLogic("", "", None, [], [], None)
 
     if "CUCount" not in data:
@@ -228,23 +224,22 @@ def parseLibraryLogicData(data, srcFile="?", archs=None):
 
     # unpack problemType
     problemType = ProblemType(data["ProblemType"])
-
-    # unpack solution
-    def solutionStateToSolution(solutionState) -> Solution:
+    # unpack solutions
+    solutions = []
+    for solutionState in data["Solutions"]:
         if solutionState["KernelLanguage"] == "Assembly":
             solutionState["ISA"] = Common.gfxArch(data["ArchitectureName"])
         else:
             solutionState["ISA"] = (0, 0, 0)
-        solutionState["CUCount"] = data["CUCount"]
         # force redo the deriving of parameters, make sure old version logic yamls can be validated
         solutionState["AssignedProblemIndependentDerivedParameters"] = False
         solutionState["AssignedDerivedParameters"] = False
         solutionObject = Solution(solutionState)
-        if solutionObject["ProblemType"] != problemType:
-            printExit(f"ProblemType in library logic file {srcFile} doesn't match solution: {problemType} != {solutionObject['ProblemType']}")
-        return solutionObject
 
-    solutions = [solutionStateToSolution(solutionState) for solutionState in data["Solutions"]]
+        if solutionObject["ProblemType"] != problemType:
+            printExit("ProblemType in library logic file {} doesn't match solution: {} != {}" \
+                    .format(srcFile, problemType, solutionObject["ProblemType"]))
+        solutions.append(solutionObject)
 
     newLibrary = SolutionLibrary.MasterSolutionLibrary.FromOriginalState(data, solutions)
 
@@ -344,10 +339,6 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, logicTuple
     problemTypeState = problemType.state
     problemTypeState["DataType"] = \
             problemTypeState["DataType"].value
-    problemTypeState["DataTypeA"] = \
-            problemTypeState["DataTypeA"].value
-    problemTypeState["DataTypeB"] = \
-            problemTypeState["DataTypeB"].value
     problemTypeState["DestDataType"] = \
             problemTypeState["DestDataType"].value
     problemTypeState["ComputeDataType"] = \
@@ -368,10 +359,6 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, logicTuple
         solutionState["ProblemType"] = solutionState["ProblemType"].state
         solutionState["ProblemType"]["DataType"] = \
                 solutionState["ProblemType"]["DataType"].value
-        solutionState["ProblemType"]["DataTypeA"] = \
-                solutionState["ProblemType"]["DataTypeA"].value
-        solutionState["ProblemType"]["DataTypeB"] = \
-                solutionState["ProblemType"]["DataTypeB"].value
         solutionState["ProblemType"]["DestDataType"] = \
                 solutionState["ProblemType"]["DestDataType"].value
         solutionState["ProblemType"]["ComputeDataType"] = \
@@ -393,10 +380,6 @@ def createLibraryLogic(schedulePrefix, architectureName, deviceNames, logicTuple
             solutionState["ProblemType"] = solutionState["ProblemType"].state
             solutionState["ProblemType"]["DataType"] = \
                     solutionState["ProblemType"]["DataType"].value
-            solutionState["ProblemType"]["DataTypeA"] = \
-                    solutionState["ProblemType"]["DataTypeA"].value
-            solutionState["ProblemType"]["DataTypeB"] = \
-                    solutionState["ProblemType"]["DataTypeB"].value
             solutionState["ProblemType"]["DestDataType"] = \
                     solutionState["ProblemType"]["DestDataType"].value
             solutionState["ProblemType"]["ComputeDataType"] = \

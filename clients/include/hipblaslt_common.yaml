@@ -1,26 +1,18 @@
 # Data types are defined as either aliases to Python-recognized ctypes,
 # or enums defined with c_int base clases and attributes.
 Datatypes:
-  - hipblasltDatatype_t:
+  - hipblasDatatype_t:
       bases: [ c_int ]
       attr:
         default: 151
         f16_r: 150
         f32_r: 151
-        f64_r: 152
-        i8_r: 160
-        i32_r: 162
         bf16_r: 168
-        f8_r: 170
-        bf8_r: 171
   - hipblasLtComputeType_t:
       bases: [ c_int ]
       attr:
         c_f32_r: 300
         c_xf32_r: 301
-        c_f64_r: 302
-        c_i32_r: 303
-        c_f32_fast_f16_r: 304
   - { half: f16_r }
   - hipblaslt_initialization:
       bases: [ c_int ]
@@ -59,30 +51,6 @@ Real precisions: &real_precisions
   - &single_precision
     { a_type: f32_r, b_type: f32_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_r , scale_type: f32_r}
 
-Real precisions 1 bytes: &real_precisions_1b
-  - &f8_precision_dst_fp32
-    { a_type: f8_r, b_type: f8_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &bf8f8_precision_dst_fp32
-    { a_type: bf8_r, b_type: f8_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &f8bf8_precision_dst_fp32
-    { a_type: f8_r, b_type: bf8_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &f8_precision_dst_fp16
-    { a_type: f8_r, b_type: f8_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &bf8f8_precision_dst_fp16
-    { a_type: bf8_r, b_type: f8_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &f8bf8_precision_dst_fp16
-    { a_type: f8_r, b_type: bf8_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_r, scale_type: f32_r}
-
-Real precisions 1 bytes dst fp32: &real_precisions_1b_dst_f32
-  - *f8_precision_dst_fp32
-  - *bf8f8_precision_dst_fp32
-  - *f8bf8_precision_dst_fp32
-
-Real precisions 1 bytes dst fp16: &real_precisions_1b_dst_f16
-  - *f8_precision_dst_fp16
-  - *bf8f8_precision_dst_fp16
-  - *f8bf8_precision_dst_fp16
-
 Real precisions 2 bytes: &real_precisions_2b
   - *hpa_half_precision
   - *hpa_bf16_precision
@@ -90,36 +58,6 @@ Real precisions 2 bytes: &real_precisions_2b
 Real precisions xf32: &real_precisions_intermeddiate
   - &xf32_precision
     { a_type: f32_r, b_type: f32_r, c_type: f32_r, d_type: f32_r, compute_type: c_xf32_r , scale_type: f32_r}
-
-Real precisions i8: &interger_precisions_i8
-  - &interger8_precisions
-    { a_type: i8_r, b_type: i8_r, c_type: i32_r, d_type: i32_r, compute_type: c_i32_r , scale_type: f32_r}
-
-Real precisions dstf32: &hpa_half_precisions_fp_16_32_dst
-  - &hpa_half_fp16dst_precision
-    { a_type: f16_r, b_type: f16_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_r, scale_type: f32_r}
-  - &hpa_half_fp32dst_precision
-    { a_type: f16_r, b_type: f16_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_r, scale_type: f32_r}
-
-Real precisions gemm only: &real_precisions_gemm_only
-  - &double_precision
-    { a_type: f64_r, b_type: f64_r, c_type: f64_r, d_type: f64_r, compute_type: c_f64_r , scale_type: f64_r}
-
-Real mix precisions: &real_mix_precisions
-  - &fp8fp16_precision_dst_fp16
-    { a_type: f8_r, b_type: f16_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
-  - &fp16fp8_precision_dst_fp16
-    { a_type: f16_r, b_type: f8_r, c_type: f16_r, d_type: f16_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
-  - &fp8fp16_precision_dst_fp32
-    { a_type: f8_r, b_type: f16_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
-  - &fp16fp8_precision_dst_fp32
-    { a_type: f16_r, b_type: f8_r, c_type: f32_r, d_type: f32_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
-
-Real mix precisions fp8: &real_mix_precisions_fp8
-  - &fp8fp16_precision_dst_fp8
-    { a_type: f8_r, b_type: f16_r, c_type: f8_r, d_type: f8_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
-  - &fp16fp8_precision_dst_fp8
-    { a_type: f16_r, b_type: f8_r, c_type: f8_r, d_type: f8_r, compute_type: c_f32_fast_f16_r, scale_type: f32_r}
 
 # The Arguments struct passed directly to C++. See hipblaslt_arguments.hpp.
 # The order of the entries is significant, so it can't simply be a dictionary.
@@ -132,33 +70,32 @@ Arguments:
   - known_bug_platforms: c_char*64
   - alpha: c_float
   - beta: c_float
-  - stride_a: c_int64*32
-  - stride_b: c_int64*32
-  - stride_c: c_int64*32
-  - stride_d: c_int64*32
-  - stride_e: c_int64*32
+  - stride_a: c_int64
+  - stride_b: c_int64
+  - stride_c: c_int64
+  - stride_d: c_int64
+  - stride_e: c_int64
   - user_allocated_workspace: c_size_t
-  - M: c_int64*32
-  - N: c_int64*32
-  - K: c_int64*32
-  - lda: c_int64*32
-  - ldb: c_int64*32
-  - ldc: c_int64*32
-  - ldd: c_int64*32
-  - lde: c_int64*32
+  - M: c_int64
+  - N: c_int64
+  - K: c_int64
+  - lda: c_int64
+  - ldb: c_int64
+  - ldc: c_int64
+  - ldd: c_int64
+  - lde: c_int64
   - batch_count: c_int32
   - iters: c_int32
   - cold_iters: c_int32
   - algo: c_uint32
   - solution_index: c_int32
-  - a_type: hipblasltDatatype_t
-  - b_type: hipblasltDatatype_t
-  - c_type: hipblasltDatatype_t
-  - d_type: hipblasltDatatype_t
+  - a_type: hipblasDatatype_t
+  - b_type: hipblasDatatype_t
+  - c_type: hipblasDatatype_t
+  - d_type: hipblasDatatype_t
   - compute_type: hipblasLtComputeType_t
-  - scale_type: hipblasltDatatype_t
+  - scale_type: hipblasDatatype_t
   - initialization: hipblaslt_initialization
-  - gpu_arch: c_char*4
   - pad: c_uint32
   - grouped_gemm: c_int32
   - threads: c_uint16
@@ -172,15 +109,10 @@ Arguments:
   - activation_type: hipblaslt_activation_type
   - activation_arg1: c_float
   - activation_arg2: c_float
-  - bias_type: hipblasltDatatype_t
+  - bias_type: hipblasDatatype_t
   - bias_source: hipblaslt_bias_source
   - bias_vector: c_bool
-  - scaleA: c_bool
-  - scaleB: c_bool
-  - scaleC: c_bool
-  - scaleD: c_bool
-  - scaleE: c_bool
-  - scaleAlpha_vector: c_bool
+  - scaleD_vector: c_bool
   - c_noalias_d: c_bool
   - HMM: c_bool
   - use_e: c_bool
@@ -188,8 +120,7 @@ Arguments:
   - norm_check_assert: c_bool
   - use_ext: c_bool
   - use_ext_setproblem: c_bool
-  - algo_method: c_int32
-  - use_user_args: c_bool
+  - use_findallalgo: c_bool
 
 # These named dictionary lists [ {dict1}, {dict2}, etc. ] supply subsets of
 # test arguments in a structured way. The dictionaries are applied to the test
@@ -241,7 +172,6 @@ Defaults:
   threads: 0
   streams: 0
   devices: 0
-  gpu_arch: ''
   norm_check: 0
   unit_check: 1
   timing: 0
@@ -264,15 +194,9 @@ Defaults:
   use_e: false
   gradient: false
   bias_vector: false
-  scaleA: false
-  scaleB: false
-  scaleC: false
-  scaleD: false
-  scaleE: false
-  scaleAlpha_vector: false
+  scaleD_vector: false
   grouped_gemm: 0
   norm_check_assert: true
   use_ext: false
   use_ext_setproblem: false
-  algo_method: 0
-  use_user_args: false
+  use_findallalgo: false

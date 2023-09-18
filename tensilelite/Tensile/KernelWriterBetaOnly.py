@@ -79,7 +79,7 @@ class KernelWriterBetaOnly(KernelWriterBase):
 
     # bias
     if self.state["ProblemType"]["BetaOnlyUseBias"]:
-      biasPtrStr = self.state["ProblemType"]["BiasDataType"].toDevice(self.language)
+      biasPtrStr = self.state["ProblemType"]["DataType"].toDevice(self.language)
       kStr += "  " + biasPtrStr + " const * " + "Bias," + self.endLine
 
 
@@ -92,9 +92,6 @@ class KernelWriterBetaOnly(KernelWriterBase):
       kStr += "  unsigned int const strideD%s,%s" % (self.indexChars[i], self.endLine)
     for i in range(firstStrideCD, lastStrideC):
       kStr += "  unsigned int const strideC%s,%s" % (self.indexChars[i], self.endLine)
-
-    if self.state["ProblemType"]["BetaOnlyUseBias"]:
-      kStr += "  unsigned int strideBias,%s" % (self.endLine)
 
     # sizes
     for i in range(0, self.state["ProblemType"]["NumIndicesC"]):
@@ -154,16 +151,6 @@ class KernelWriterBetaOnly(KernelWriterBase):
       indexChar = self.indexChars[i]
       kStr += " + (IDX%s)*strideC%s" % (indexChar, indexChar)
     kStr += " ))" + self.endLine
-
-    # GLOBAL_BIAS()
-    if self.state["ProblemType"]["BetaOnlyUseBias"] and self.state["ProblemType"]["NumIndicesC"] > 2:
-      kStr += "#define GLOBAL_BIAS(IDX%s" % self.indexChars[0]
-      kStr += ", IDX%s" % self.indexChars[2]
-      indexChar = self.indexChars[0]
-      kStr += ") (( (IDX%s)" % (indexChar)
-      indexChar = self.indexChars[2]
-      kStr += " + (IDX%s)*strideBias" % (indexChar)
-      kStr += " ))" + self.endLine
 
     ########################################
     # multi buffers GSU: Accumulate all GSU buffer
@@ -243,11 +230,7 @@ class KernelWriterBetaOnly(KernelWriterBase):
 
     biasStr = ""
     if self.state["ProblemType"]["BetaOnlyUseBias"]:
-  
-      if problemType["NumIndicesC"] > 2:
-        biasStr = " + ((" + self.datatype + ")(Bias == 0 ? 0 : GLOBAL_BIAS((%s)id0, id2)))"% (self.uint64Str)
-      else:
-        biasStr = " + ((" + self.datatype + ")(Bias == 0 ? 0 : Bias[id0]))"
+      biasStr = " + ((" + self.datatype + ")(Bias == 0 ? 0 : Bias[id0]))"
 
     ########################################
     # zero
@@ -266,8 +249,6 @@ class KernelWriterBetaOnly(KernelWriterBase):
       kStr += "#undef strideC" + self.indexChars[i] + self.endLine
     kStr += "#undef GLOBAL_D%s" % (self.endLine)
     kStr += "#undef GLOBAL_C%s" % (self.endLine)
-    if self.state["ProblemType"]["BetaOnlyUseBias"] and self.state["ProblemType"]["NumIndicesC"] > 2:
-      kStr += "#undef  GLOBAL_BIAS%s" % ( self.endLine)
     kStr += "#undef SCALAR_ZERO%s" % ( self.endLine)
 
     return kStr

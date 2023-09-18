@@ -76,13 +76,14 @@ def state(obj):
         return rv
 
     if isinstance(obj, dict):
-        return {k: state(v) for k, v in obj.items()}
+        return dict([(k, state(v)) for k,v in list(obj.items())])
 
-    if isinstance(obj, (str, int, float)):
+    if any([isinstance(obj, cls) for cls in [str, int, float]]):
         return obj
 
     try:
-        return [state(i) for i in obj]
+        obj = [state(i) for i in obj]
+        return obj
     except TypeError:
         pass
 

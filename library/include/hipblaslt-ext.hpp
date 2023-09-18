@@ -91,10 +91,10 @@ namespace hipblaslt_ext
     {
         hipblasOperation_t     op_a; //!< The A martix transpose
         hipblasOperation_t     op_b; //!< The B matrix transpose
-        hipblasltDatatype_t    type_a; //!< The A matrix datatype.
-        hipblasltDatatype_t    type_b; //!< The B matrix datatype.
-        hipblasltDatatype_t    type_c; //!< The C matrix datatype.
-        hipblasltDatatype_t    type_d; //!< The D matrix datatype.
+        hipblasDatatype_t      type_a; //!< The A matrix datatype.
+        hipblasDatatype_t      type_b; //!< The B matrix datatype.
+        hipblasDatatype_t      type_c; //!< The C matrix datatype.
+        hipblasDatatype_t      type_d; //!< The D matrix datatype.
         hipblasLtComputeType_t type_compute; //!< The compute datatype.
     };
 
@@ -107,7 +107,7 @@ namespace hipblaslt_ext
     {
         hipblasLtEpilogue_t mode
             = HIPBLASLT_EPILOGUE_DEFAULT; //!< The mode of epilogue. Default is gemm.
-        hipblasltDatatype_t bias_data_type = static_cast<hipblasltDatatype_t>(
+        hipblasDatatype_t bias_data_type = static_cast<hipblasDatatype_t>(
             0); //!< The bias datatype. Only works if mode is set to bias related epilogues.
         int aux_ld
             = 0; //!< The aux leading dimension. Only works if mode is set to aux related epilogues.
@@ -129,57 +129,10 @@ namespace hipblaslt_ext
         void* alpha = nullptr; //!< The alpha value.
         void* beta  = nullptr; //!< The beta value.
         // Epilogue inputs
-        void* bias          = nullptr; //!< The bias input pointer.
-        void* scaleA        = nullptr; //!< The Scale A input pointer.
-        void* scaleB        = nullptr; //!< The Scale B input pointer.
-        void* scaleC        = nullptr; //!< The Scale C input pointer.
-        void* scaleD        = nullptr; //!< The Scale D input pointer.
-        void* scaleAux      = nullptr; //!< The Scale AUX input pointer.
-        void* scaleAlphaVec = nullptr; //!< The scaleAlpha vector input pointer.
-        void* aux           = nullptr; //!< The aux input pointer.
+        void* bias      = nullptr; //!< The bias input pointer.
+        void* scaleDVec = nullptr; //!< The scaleD vector input pointer.
+        void* aux       = nullptr; //!< The aux input pointer.
     };
-
-    /*! \ingroup types_module
-     *  \brief hipblasLt extension GPU inputs for gemm problems.
-     *
-     * \details This strusture sets the input gpu pointers of a gemm problem.
-     * Only supports solutions loading arguments from global memory.
-     */
-
-    struct UserArguments
-    {
-        uint32_t m; //!< size m
-        uint32_t n; //!< size n
-        uint32_t batch; //!< size batch
-        uint32_t k; //!< size k
-        void*    d; //!< The d matrix input pointer.
-        void*    c; //!< The c matrix input pointer.
-        void*    a; //!< The a matrix input pointer.
-        void*    b; //!< The b matrix input pointer.
-        uint32_t strideD1; //!< The d leading dimension.
-        uint32_t strideD2; //!< The d batch stride
-        uint32_t strideC1; //!< The c leading dimension.
-        uint32_t strideC2; //!< The c batch stride
-        uint32_t strideA1; //!< The a leading dimension.
-        uint32_t strideA2; //!< The a batch stride
-        uint32_t strideB1; //!< The b leading dimension.
-        uint32_t strideB2; //!< The b batch stride
-        int8_t   alpha[16]; //!< The alpha value.
-        int8_t   beta[16]; //!< The beta value.
-        // Epilogue inputs
-        void* scaleAlphaVec; //!< The scaleAlpha vector input pointer.
-        void* bias; //!< The bias input pointer.
-        int   biasType; //!< The bias datatype. Only works if mode is set to bias related epilogues.
-        uint32_t reserved;
-        void*    e; //!< The aux input pointer. Only works if mode is set to aux related epilogues.
-        uint32_t
-            strideE1; //!< The aux leading dimension. Only works if mode is set to aux related epilogues.
-        uint32_t
-            strideE2; //!< The aux batch stride. Only works if mode is set to aux related epilogues.
-        float act0; //!< The activation value 1. Some activations might use it.
-        float act1; //!< The activation value 2.
-        int activationType; //!< The activation type.  Only works if mode is set to activation related epilogues.
-    } __attribute__((packed));
 
     /*! \ingroup types_module
      *  \brief hipblasLt extension instance for gemm problems.
@@ -200,8 +153,6 @@ namespace hipblaslt_ext
         *
         *  @param[in]
         *  requestedAlgoCount  number of requested algorithms.
-        *  @param[in]
-        *  pref hipblasLt extension preference for gemm problems.
         *  @param[out]
         *  heuristicResults    The algorithm heuristic vector.
         *
@@ -237,15 +188,15 @@ namespace hipblaslt_ext
         hipblasStatus_t isAlgoSupported(hipblasLtMatmulAlgo_t& algo, size_t& workspaceSizeInBytes);
 
         /*! \ingroup library_module
-        *  \brief Create kernel arguments from a given hipblaslt_ext::GemmInstance.
+        *  \brief Create kernel arguments from a given hipblaslt_ext::Gemm instance.
         *
         *  \details
-        *  This function creates kernel arguments from a given hipblaslt_ext::GemmInstance
-        *  then saves the arguments inside the instance.
+        *  This function creates kernel arguemtns from a given hipblaslt_ext::Gemm instance
+        * then saves the arguments inside the instance.
         *
         *  @param[in]
         *  algo                    Handle for matrix multiplication algorithm to be
-        * used. See hipblaslt.h::hipblasLtMatmulAlgo_t . When NULL, an implicit heuristics query
+        * used. See \ref hipblasLtMatmulAlgo_t. When NULL, an implicit heuritics query
         * with default search preferences will be performed to determine actual
         * algorithm to use.
         *  @param[in]
@@ -253,23 +204,19 @@ namespace hipblaslt_ext
         * memory. Pointer must be 16B aligned (that is, lowest 4 bits of address must
         * be 0).
         *  @param[in]
-        *  useUserArgs                Use user args, this does not affect vanilla gemm.
-        * (May be deprecated in the future)
-        *  @param[in]
         *  stream                  The HIP stream where all the GPU work will be
-        * submitted. (May be deprecated in the future)
+        * submitted.
         *
         *  \retval HIPBLAS_STATUS_SUCCESS           If the operation completed
         * successfully. \retval HIPBLAS_STATUS_INVALID_VALUE If the gemm_count = 0.
         */
         HIPBLASLT_EXPORT
-        hipblasStatus_t initialize(const hipblasLtMatmulAlgo_t& algo,
-                                   void*                        workspace,
-                                   bool                         useUserArgs = true,
-                                   hipStream_t                  stream      = 0);
+        hipblasStatus_t
+            initialize(const hipblasLtMatmulAlgo_t& algo, void* workspace, hipStream_t stream);
 
         /*! \ingroup library_module
-        *  \brief Execute the kernel arguments stored inside the hipblaslt_ext::GemmInstance.
+        *  \brief Execute the kernel arguments stored inside the hipblaslt_ext::Gemm
+        * instance.
         *
         *  @param[in]
         *  stream                  The HIP stream where all the GPU work will be
@@ -330,10 +277,10 @@ namespace hipblaslt_ext
         HIPBLASLT_EXPORT explicit Gemm(hipblasLtHandle_t      handle,
                                        hipblasOperation_t     opA,
                                        hipblasOperation_t     opB,
-                                       hipblasltDatatype_t    typeA,
-                                       hipblasltDatatype_t    typeB,
-                                       hipblasltDatatype_t    typeC,
-                                       hipblasltDatatype_t    typeD,
+                                       hipblasDatatype_t      typeA,
+                                       hipblasDatatype_t      typeB,
+                                       hipblasDatatype_t      typeC,
+                                       hipblasDatatype_t      typeD,
                                        hipblasLtComputeType_t typeCompute);
 
         /*! \ingroup library_module
@@ -346,7 +293,7 @@ namespace hipblaslt_ext
         *  @param[in]
         *  handle                  The handle from hipBLASLt.
         *  @param[in]
-        *  matmul_descr              Handle to a previously created matrix multiplication
+        *  matmulDesc              Handle to a previously created matrix multiplication
         * descriptor of type \ref hipblasLtMatmulDesc_t .
         *  @param[in]
         *  alpha,beta              Pointers to the scalars used in the multiplication.
@@ -464,7 +411,7 @@ namespace hipblaslt_ext
         * about the structures, see hipblasLtMatmul for more information.
         *
         *  @param[in]
-        *  matmul_descr              Handle to a previously created matrix multiplication
+        *  matmulDesc              Handle to a previously created matrix multiplication
         * descriptor of type \ref hipblasLtMatmulDesc_t .
         *  @param[in]
         *  alpha,beta              Pointers to the scalars used in the multiplication.
@@ -535,10 +482,10 @@ namespace hipblaslt_ext
         HIPBLASLT_EXPORT explicit GroupedGemm(hipblasLtHandle_t      handle,
                                               hipblasOperation_t     opA,
                                               hipblasOperation_t     opB,
-                                              hipblasltDatatype_t    typeA,
-                                              hipblasltDatatype_t    typeB,
-                                              hipblasltDatatype_t    typeC,
-                                              hipblasltDatatype_t    typeD,
+                                              hipblasDatatype_t      typeA,
+                                              hipblasDatatype_t      typeB,
+                                              hipblasDatatype_t      typeC,
+                                              hipblasDatatype_t      typeD,
                                               hipblasLtComputeType_t typeCompute);
 
         /*! \ingroup library_module
@@ -551,7 +498,7 @@ namespace hipblaslt_ext
         *  @param[in]
         *  handle                  The handle from hipBLASLt.
         *  @param[in]
-        *  matmul_descr              Vectors of handle to a previously created matrix
+        *  matmulDesc              Vectors of handle to a previously created matrix
         * multiplication descriptor of type \ref hipblasLtMatmulDesc_t .
         *  @param[in]
         *  alpha,beta              Vectors of float used in the multiplication.
@@ -567,12 +514,12 @@ namespace hipblaslt_ext
         */
         HIPBLASLT_EXPORT explicit GroupedGemm(hipblasLtHandle_t                     handle,
                                               std::vector<hipblasLtMatmulDesc_t>&   matmul_descr,
-                                              std::vector<void*>&                   alpha,
+                                              std::vector<float>&                   alpha,
                                               std::vector<void*>&                   A,
                                               std::vector<hipblasLtMatrixLayout_t>& matA,
                                               std::vector<void*>&                   B,
                                               std::vector<hipblasLtMatrixLayout_t>& matB,
-                                              std::vector<void*>&                   beta,
+                                              std::vector<float>&                   beta,
                                               std::vector<void*>&                   C,
                                               std::vector<hipblasLtMatrixLayout_t>& matC,
                                               std::vector<void*>&                   D,
@@ -670,7 +617,7 @@ namespace hipblaslt_ext
         * about the structures, see hipblasLtMatmul for more information.
         *
         *  @param[in]
-        *  matmul_descr              Vectors of handle to a previously created matrix
+        *  matmulDesc              Vectors of handle to a previously created matrix
         * multiplication descriptor of type \ref hipblasLtMatmulDesc_t .
         *  @param[in]
         *  alpha,beta              Vectors of float used in the multiplication.
@@ -697,48 +644,18 @@ namespace hipblaslt_ext
         */
         HIPBLASLT_EXPORT hipblasStatus_t
             setProblem(std::vector<hipblasLtMatmulDesc_t>&   matmul_descr,
-                       std::vector<void*>&                   alpha,
+                       std::vector<float>&                   alpha,
                        std::vector<void*>&                   A,
                        std::vector<hipblasLtMatrixLayout_t>& matA,
                        std::vector<void*>&                   B,
                        std::vector<hipblasLtMatrixLayout_t>& matB,
-                       std::vector<void*>&                   beta,
+                       std::vector<float>&                   beta,
                        std::vector<void*>&                   C,
                        std::vector<hipblasLtMatrixLayout_t>& matC,
                        std::vector<void*>&                   D,
                        std::vector<hipblasLtMatrixLayout_t>& matD);
 
         HIPBLASLT_EXPORT std::vector<GemmProblemType> getProblemTypes();
-
-        /*! \ingroup library_module
-        *  \brief A helper function to initialize DeviceUserArguments using the set problem(s)
-        * saved in the gemm object.
-        *
-        *  @param[in]
-        *  hostDeviceUserArgs The DeviceUserArguments struture allocated in host. Note that
-        * the user must put the correct type of the DeviceUserArguments.
-        *
-        *  \retval HIPBLAS_STATUS_SUCCESS           If the operation completed successfully.
-        */
-        HIPBLASLT_EXPORT hipblasStatus_t
-            getDefaultValueForDeviceUserArguments(void* hostDeviceUserArgs);
-
-        using GemmInstance::run;
-
-        /*! \ingroup library_module
-        *  \brief Run the kernel using DeviceUserArguments
-        *
-        *  @param[in]
-        *  deviceUserArgs          Pointer to the DeviceUserArguments buffer allocated
-        * in the GPU memory. Pointer must be 16B aligned (that is, lowest 4 bits of
-        *  @param[in]
-        *  stream                  The HIP stream where all the GPU work will be
-        * submitted.
-        *
-        *  \retval HIPBLAS_STATUS_SUCCESS           If the operation completed
-        * successfully. \retval HIPBLAS_STATUS_INVALID_VALUE If the gemm_count = 0.
-        */
-        HIPBLASLT_EXPORT hipblasStatus_t run(void* deviceUserArgs, hipStream_t stream);
     };
 
     /*******************************************************************************
@@ -753,14 +670,14 @@ namespace hipblaslt_ext
      *  \details
      *  This function retrieves the possible algorithms for the matrix multiply
      * operation hipblasLtMatmul() function with the given data and compute tpye.
-     * The output is placed in heuristicResults in the order of increasing
+     * The output is placed in heuristicResult in the order of increasing
      * estimated compute time.
      *
      *  @param[in]
      *  handle                  Pointer to the allocated hipBLASLt handle for the
      * hipBLASLt context. See \ref hipblasLtHandle_t .
      *  @param[in]
-     *  typeGemm Gemm type. ex. GEMM, GROUPED_GEMM.
+     *  hipblasLtExtGemmTypeEnum_t Gemm type. ex. GEMM, GROUPED_GEMM.
      *  @param[in]
      *  opA, opB Transpose settings of A, B.
      *  @param[in]
@@ -768,7 +685,7 @@ namespace hipblaslt_ext
      *  @param[in]
      *  typeCompute             The compute type.
      *  @param[out]
-     *  heuristicResults The algorithm heuristic vector.
+     *  heuristicResult The algorithm heuristic vector.
      *
      *  \retval HIPBLAS_STATUS_SUCCESS           If query was successful. Inspect
      * returnedAlgoCount > 0.state for the status of the
@@ -781,54 +698,12 @@ namespace hipblaslt_ext
                                 GemmType                                       typeGemm,
                                 hipblasOperation_t                             opA,
                                 hipblasOperation_t                             opB,
-                                hipblasltDatatype_t                            typeA,
-                                hipblasltDatatype_t                            typeB,
-                                hipblasltDatatype_t                            typeC,
-                                hipblasltDatatype_t                            typeD,
+                                hipblasDatatype_t                              typeA,
+                                hipblasDatatype_t                              typeB,
+                                hipblasDatatype_t                              typeC,
+                                hipblasDatatype_t                              typeD,
                                 hipblasLtComputeType_t                         typeCompute,
                                 std::vector<hipblasLtMatmulHeuristicResult_t>& heuristicResults);
-
-    /*! \ingroup library_module
-     *  \brief Retrieve the algorithm index
-     *
-     *  @param[in]
-     *  algo    The algorithm.
-     *
-     *  \retval int The index of the algorithm, can be used to get hueristic
-     * results from \ref getAlgosFromIndex. Returns -1 if the index stored
-     * in algo < 0. Note that the index may not be valid if the algo struct
-     * is not initialized properly.
-     */
-    HIPBLASLT_EXPORT int getIndexFromAlgo(hipblasLtMatmulAlgo_t& algo);
-
-    /*! \ingroup library_module
-     *  \brief Retrieve the possible algorithms
-     *
-     *  \details
-     *  This function retrieves the possible algorithms for the matrix multiply
-     * operation hipblasLtMatmul() function with the given index.
-     * The output is placed in heuristicResult in the order of increasing
-     * estimated compute time.
-     *
-     *  @param[in]
-     *  handle                  Pointer to the allocated hipBLASLt handle for the
-     * hipBLASLt context. See \ref hipblasLtHandle_t .
-     *  @param[in]
-     *  algoIndex               The algorithm index vector.
-     *  @param[out]
-     *  heuristicResults         The algorithm heuristic vector.
-     *
-     *  \retval HIPBLAS_STATUS_SUCCESS           If query was successful. Inspect
-     * heuristicResults.size() > 0.state for the status of the
-     * results. \retval HIPBLAS_STATUS_NOT_SUPPORTED     If no heuristic function
-     * available for current configuration. \retval HIPBLAS_STATUS_INVALID_VALUE If
-     * no solution is found.
-     */
-    HIPBLASLT_EXPORT
-    hipblasStatus_t
-        getAlgosFromIndex(hipblasLtHandle_t                              handle,
-                          std::vector<int>&                              algoIndex,
-                          std::vector<hipblasLtMatmulHeuristicResult_t>& heuristicResults);
 
     /*! \ingroup library_module
      *  \brief Check if the algorithm supports the problem. (For hipblasLt API)

@@ -30,8 +30,6 @@ set(hipblaslt_test_source
     hipblaslt_test.cpp
     matmul_gtest.cpp
     auxiliary_gtest.cpp
-    matrix_transform_gtest.cpp
-    hipblaslt_gtest_ext_op.cpp
   )
 
 add_executable( hipblaslt-test ${hipblaslt_test_source} ${hipblaslt_test_bench_common} )
@@ -121,13 +119,6 @@ add_custom_command( OUTPUT "${HIPBLASLT_TEST_DATA}"
 add_custom_target( hipblaslt-test-data
                    DEPENDS "${HIPBLASLT_TEST_DATA}" )
 add_dependencies( hipblaslt-test hipblaslt-test-data hipblaslt-common )
-
-# Not suitable because loading takes too much time
-# include(GoogleTest)
-# gtest_discover_tests(hipblaslt-test TEST_PREFIX gtest:)
-add_test(NAME hipblaslt-test COMMAND hipblaslt-test --gtest_output=xml --gtest_color=yes '--gtest_filter=*')
-set_tests_properties(hipblaslt-test
-                     PROPERTIES ENVIRONMENT GTEST_LISTENER=NO_PASS_LINE_IN_LOG)
 
 rocm_install(TARGETS hipblaslt-test COMPONENT tests)
 rocm_install(FILES ${HIPBLASLT_TEST_DATA} DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT tests)

@@ -213,9 +213,6 @@ def SBranchIfZero(sgprName, computeDataType: DataType, tmpSgpr, laneSC, label, w
     elif computeDataType.isInt32(): # int32
         module.add(SCmpEQU32(src0=sgpr(sgprName), src1=0, comment="%s == 0 ?" % sgprStr))
         module.add(SCBranchSCC1(labelName=label.getLabelName(), comment="branch if %s == 0" % sgprStr))
-    elif computeDataType.isInt64(): # int64
-        module.add(SCmpEQU64(src0=sgpr(sgprName,2), src1=0, comment="%s == 0 ?" % sgprStr))
-        module.add(SCBranchSCC1(labelName=label.getLabelName(), comment="branch if %s == 0" % sgprStr))
     else:
         print("Unsupported compute data type: %s" % str(computeDataType))
         sys.stdout.flush()
@@ -397,24 +394,13 @@ class ArgumentLoader:
         return item
 
     def loadAllKernArg(self, sgprStartIndex: int, srcAddr: Union[int, str], \
-                    numSgprToLoad: int, numSgprPreload: int=0) -> Module:
+                    numSgprToLoad: int) -> Module:
         module = Module("LoadAllKernArg")
-        actualLoad = numSgprToLoad - numSgprPreload
-        sgprStartIndex += numSgprPreload
-        self.kernArgOffset += numSgprPreload * 4
-        while actualLoad > 0:
+        while numSgprToLoad > 0:
             i = 16 # 16, 8, 4, 2, 1
             while i >= 1:
-                isSgprAligned = False
-                if (i >= 4) and (sgprStartIndex % 4 == 0):
-                  isSgprAligned = True
-                elif (i == 2) and (sgprStartIndex % 2 == 0):
-                  isSgprAligned = True
-                elif i == 1:
-                  isSgprAligned = True
-
-                if isSgprAligned and actualLoad >= i:
-                    actualLoad -= i
+                if numSgprToLoad >= i:
+                    numSgprToLoad -= i
                     SLoadBX = { 512: SLoadB512,
                                 256: SLoadB256,
                                 128: SLoadB128,
@@ -627,7 +613,7 @@ class Dump:
                 src=vgpr("Serial"), \
                 comment="dump lds"))
             for i in range(startU, startU+numU):
-                module.add(DSLoadB32(dst=vgpr(tmp), src=vgpr(tmpAddr),
+                module.add(DSLoadB32(dst=vgpr(tmp), src=vgpr(tmpAddr), readToTempVgpr=True,
                         ds=DSModifiers(offset=(i*numThreads*4)), comment="dump lds"))
                 module.add(SWaitCnt(lgkmcnt=0, vmcnt=0, vscnt=0, comment="dump"))
                 module.add(self.dumpVgpr(tmp, labelName))

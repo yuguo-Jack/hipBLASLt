@@ -117,8 +117,8 @@ def syncThreads(kernel, archCaps, comment=""):
     imod = Module("syncThreads")
     if kernel["NumThreads"] > kernel["WavefrontSize"]:
         if archCaps["SeparateVscnt"]:
-            imod.add(SWaitCnt(lgkmcnt="null", comment="extra navi wait"))
-        elif kernel["ScheduleIterAlg"] == 2 \
+            imod.add(SWaitCnt(vscnt=0))
+        elif kernel.enabledSplitLDS or kernel["ScheduleIterAlg"] == 2 \
           or kernel["PrefetchGlobalRead"] == 2:
             imod.addComment("Skip force waitcnt0")
         elif archCaps["Waitcnt0Disabled"]:
@@ -131,22 +131,23 @@ def syncThreads(kernel, archCaps, comment=""):
                 comment)
     return imod
 
-def _getAccToArchInfo(kernel):
+def _getAccToArchInfo(kernel, lrvwB):
   matrixInstM  = (kernel["MatrixInstM"] * kernel["MatrixInstBM"]) if (kernel["MatrixInstM"] == 4) else kernel["MatrixInstM"]
   matrixInstN  = (kernel["MatrixInstN"] * kernel["MatrixInstBN"]) if (kernel["MatrixInstN"] == 4) else kernel["MatrixInstN"]
   matrixInstBM = 1                                                if (kernel["MatrixInstM"] == 4) else kernel["MatrixInstBM"]
   matrixInstBN = 1                                                if (kernel["MatrixInstN"] == 4) else kernel["MatrixInstBN"]
 
   OutputsPerMFMA1B = matrixInstM * matrixInstN // kernel["WavefrontSize"]
-  VectorWidth0     = kernel["VectorWidthA"]
+  VectorWidth0     = kernel["VectorWidth"] if kernel["SourceSwap"] else 1
   outerTT0         = kernel["MIWaveTile"][0] // VectorWidth0
-  VectorWidth1     = kernel["VectorWidthB"]
+  lrvwB            = lrvwB if kernel["allowLRVWforTLUandMI"] else 1
+  VectorWidth1     = lrvwB
   outerTT1         = kernel["MIWaveTile"][1] // VectorWidth1
-  return matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, VectorWidth1, outerTT0, outerTT1
+  return matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, outerTT0, lrvwB, outerTT1
 
-def getAccToArchLen(kernel):
-  matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, VectorWidth1, outerTT0, outerTT1 = _getAccToArchInfo(kernel)
-  return (outerTT1 * outerTT0 * matrixInstBN * matrixInstBM * OutputsPerMFMA1B * VectorWidth0 * VectorWidth1)
+def getAccToArchLen(kernel, lrvwB):
+  matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, outerTT0, lrvwB, outerTT1 = _getAccToArchInfo(kernel, lrvwB)
+  return (outerTT1 * lrvwB *  outerTT0 * matrixInstBN * matrixInstBM * OutputsPerMFMA1B * VectorWidth0)
 
 ##############################################################################
 # accToArchMapper
@@ -155,45 +156,45 @@ def getAccToArchLen(kernel):
 #  - Backward transformation is used in ShiftVectorComponent() to map logical
 #    C-tile index back to original acc index
 ##############################################################################
-def accToArchMapper(kernel):
+def accToArchMapper(kernel, lrvwB):
   acc2arch = dict()
   arch2acc = dict()
 
-  matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, VectorWidth1, outerTT0, outerTT1 = _getAccToArchInfo(kernel)
+  matrixInstBM, matrixInstBN, OutputsPerMFMA1B, VectorWidth0, outerTT0, lrvwB, outerTT1 = _getAccToArchInfo(kernel, lrvwB)
 
   for wgIdx1 in range(0, outerTT1):
-    for wgIdx0 in range(0, outerTT0):
-      for bIdx1 in range(0, matrixInstBN):
-        for bIdx0 in range(0, matrixInstBM):
-          for tIdx in range(0, OutputsPerMFMA1B):
-            for vw1 in range(0, VectorWidth1):
+    for lb in range(0, lrvwB):
+      for wgIdx0 in range(0, outerTT0):
+        for bIdx1 in range(0, matrixInstBN):
+          for bIdx0 in range(0, matrixInstBM):
+            for tIdx in range(0, OutputsPerMFMA1B):
               for vw0 in range(0, VectorWidth0):
                 src, dst = 0, 0
                 if kernel["SourceSwap"]:
-                  src = tIdx + OutputsPerMFMA1B * (bIdx0 + matrixInstBM * (bIdx1 + matrixInstBN * (vw0 + VectorWidth0 * (wgIdx0 + outerTT0 * (vw1 + VectorWidth1 * (wgIdx1))))))
-                  dst = vw0 + VectorWidth0 * (bIdx0 + matrixInstBM * (wgIdx0 + outerTT0 * (vw1 + VectorWidth1 * (tIdx + OutputsPerMFMA1B * (bIdx1 + matrixInstBN * (wgIdx1))))))
+                  src = tIdx + OutputsPerMFMA1B * (bIdx0 + matrixInstBM * (bIdx1 + matrixInstBN * (vw0 + VectorWidth0 * (wgIdx0 + outerTT0 * (wgIdx1 * lrvwB + lb)))))
+                  dst = vw0 + VectorWidth0 * ((bIdx0 + matrixInstBM * (wgIdx0 + outerTT0 * ((tIdx + OutputsPerMFMA1B * (bIdx1 + matrixInstBN * wgIdx1)) * lrvwB + lb))))
                 else:
-                  src = tIdx + OutputsPerMFMA1B * (bIdx1 + matrixInstBN * (bIdx0 + matrixInstBM * (vw0 + VectorWidth0 * (wgIdx0 + outerTT0 * (vw1 + VectorWidth1 * (wgIdx1))))))
-                  dst = vw0 + VectorWidth0 * (tIdx + OutputsPerMFMA1B * (bIdx0 + matrixInstBM * (wgIdx0 + outerTT0 * (vw1 + VectorWidth1 * (bIdx1 + matrixInstBN * (wgIdx1))))))
+                  src = tIdx + OutputsPerMFMA1B * (bIdx1 + matrixInstBN * (bIdx0 + matrixInstBM * (wgIdx0 + outerTT0 * wgIdx1)))
+                  dst = tIdx + OutputsPerMFMA1B * (bIdx0 + matrixInstBM * (wgIdx0 + outerTT0 * (bIdx1 + matrixInstBN * wgIdx1)))
                 acc2arch[src] = dst
                 arch2acc[dst] = src
   return acc2arch, arch2acc
 
-def accVgprImagNumOffset(kernel):
-  acc2arch, _ = accToArchMapper(kernel)
+def accVgprImagNumOffset(kernel, lrvwB):
+  acc2arch, _ = accToArchMapper(kernel, lrvwB)
   return len(acc2arch) * kernel["MIRegPerOut"]
 
 ##############################################################################
 # MapAcctoArch
 # function to map MFMA Acc  Registers to Arch VGPR register
 ##############################################################################
-def mapAcctoArchRegs(kernel):
-  acc2arch, _ = accToArchMapper(kernel)
+def mapAcctoArchRegs(kernel, lrvwB):
+  acc2arch, _ = accToArchMapper(kernel, lrvwB)
 
   complexMultiplier = 2 if kernel["ProblemType"]["DataType"].isComplex() else 1
   imod = Module("AccVgprRead")
   imod.itemList = [None] * kernel["MIRegPerOut"] * complexMultiplier * len(acc2arch)
-  accImOffset = accVgprImagNumOffset(kernel)
+  accImOffset = accVgprImagNumOffset(kernel, lrvwB)
   for i in range(len(acc2arch)):
     for cm in range(complexMultiplier):
       for r in range(kernel["MIRegPerOut"]):
@@ -214,8 +215,8 @@ def mapAcctoArchRegs(kernel):
 # MulMIoutAlphaToArch
 # function to handle MFMA alpha*MIout to Arch VGPR register
 ##############################################################################
-def mulMIoutAlphaToArch(kernel, startVgprAlphaTmp):
-  acc2arch, _ = accToArchMapper(kernel)
+def mulMIoutAlphaToArch(kernel, lrvwB, startVgprAlphaTmp):
+  acc2arch, _ = accToArchMapper(kernel, lrvwB)
 
   imod = Module("MulAlpha")
   imod.itemList = [None] * len(acc2arch)
@@ -231,31 +232,12 @@ def mulMIoutAlphaToArch(kernel, startVgprAlphaTmp):
       imod.itemList[destIdx] = VMulF32(dst=vgpr(Holder(name="ValuC")),
                                                     src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%srcIdx),
                                                     comment="Multiply MI out reg with alpha")
-    elif (kernel["ProblemType"]["ComputeDataType"].isHalf() and not kernel["ProblemType"]["HighPrecisionAccumulate"]):
-        imod.itemList[destIdx] = VMulPKF16(dst=vgpr(Holder(name="ValuC")),
-                                                       src0=sgpr("Alpha"),
-                                                       src1=vgpr("ValuC+%u"%srcIdx), comment="Multiply MI out reg with alpha")
     elif kernel["ProblemType"]["ComputeDataType"].isInt32():
       imod.itemList[destIdx] = VMulLOU32(dst=vgpr(Holder(name="ValuC")),
                                                       src0=sgpr("Alpha"), src1=vgpr("ValuC+%u"%srcIdx),
                                                        comment="Multiply MI out reg with alpha")
-    elif kernel["ProblemType"]["ComputeDataType"].isSingleComplex():
-        accImOffset = accVgprImagNumOffset(kernel, lrvwB)
-        cimod = Module()
-        # cannot use tmp vgpr for write batch, use allocated vgpr instead
-        vtmp1 = startVgprAlphaTmp
-        vtmp2 = vtmp1 + 1
-        # tmp1 = a.real * b.real
-        cimod.add(VMulF32(dst=vgpr(vtmp1), src0=sgpr("Alpha+0"), src1=vgpr("ValuC+%u"%srcIdx), comment=""))
-        # tmp2 = a.imag * b.real
-        cimod.add(VMulF32(dst=vgpr(vtmp2), src0=sgpr("Alpha+1"), src1=vgpr("ValuC+%u"%srcIdx), comment=""))
-        # c.real = a.real * b.real - a.imag * b.imag = tmp1 - a.imag * b.imag
-        cimod.add(VFmaF32(dst=vgpr(Holder(name="ValuC")), src0=sgpr("Alpha+1"), src1=vgpr("ValuC+%u"%(srcIdx+accImOffset)), src2=vgpr(vtmp1)))
-        # c.imag = a.real * b.imag + a.imag * b.real = a.real * b.imag + tmp2
-        cimod.add(VFmaF32(dst=vgpr(Holder(name="ValuC+1")), src0=sgpr("Alpha+0"), src1=vgpr("ValuC+%u"%(srcIdx+accImOffset)), src2=vgpr(vtmp2)))
-        imod.itemList[destIdx] = cimod
     elif kernel["ProblemType"]["ComputeDataType"].isDoubleComplex():
-      accImOffset = accVgprImagNumOffset(kernel)
+      accImOffset = accVgprImagNumOffset(kernel, lrvwB)
       cimod = Module()
       # cannot use tmp vgpr for write batch, use allocated vgpr instead
       vtmp1 = startVgprAlphaTmp
@@ -270,47 +252,3 @@ def mulMIoutAlphaToArch(kernel, startVgprAlphaTmp):
       cimod.add(VFmaF64(dst=vgpr(Holder(name="ValuC+2"),2), src0=sgpr("Alpha+0",2), src1=vgpr("ValuC+%u"%(srcIdx+accImOffset),2), src2=vgpr(vtmp2,2)))
       imod.itemList[destIdx] = cimod
   return imod
-
-  ##############################################################################
-  # MoveMIoutToArch
-  # function to handle MFMA MIout to Arch VGPR register
-  ##############################################################################
-def moveMIoutToArch(kernel, startVgprAlphaTmp):
-  acc2arch, _ = accToArchMapper(kernel)
-
-  imod = Module("MulAlpha")
-  imod.itemList = [None] * len(acc2arch)
-  for i in range(len(acc2arch)):
-    destIdx = acc2arch[i]
-    srcIdx  = i * kernel["MIRegPerOut"]
-    if kernel["ProblemType"]["ComputeDataType"].isDouble():
-      imod.itemList[destIdx] = VLShiftLeftB64(dst=vgpr(Holder(name="ValuC"), 2),
-                                                     shiftHex=0,
-                                                     src=vgpr("ValuC+%u"%srcIdx,2), comment="Rearrange MI out reg")
-    elif kernel["ProblemType"]["ComputeDataType"].isSingle() or \
-        (kernel["ProblemType"]["ComputeDataType"].isHalf() and kernel["ProblemType"]["HighPrecisionAccumulate"]):
-      imod.itemList[destIdx] = VMovB32(dst=vgpr(Holder(name="ValuC")),
-                                                     src=vgpr("ValuC+%u"%srcIdx), comment="Rearrange MI out reg")
-    elif (kernel["ProblemType"]["ComputeDataType"].isHalf() and not kernel["ProblemType"]["HighPrecisionAccumulate"]):
-      imod.itemList[destIdx] = VMovB32(dst=vgpr(Holder(name="ValuC")),
-                                                     src=vgpr("ValuC+%u"%srcIdx), comment="Rearrange MI out reg")
-    elif kernel["ProblemType"]["ComputeDataType"].isInt32():
-      imod.itemList[destIdx] = VMovB32(dst=vgpr(Holder(name="ValuC")),
-                                                     src=vgpr("ValuC+%u"%srcIdx), comment="Rearrange MI out reg")
-    elif kernel["ProblemType"]["ComputeDataType"].isSingleComplex():
-        accImOffset = accVgprImagNumOffset(kernel, lrvwB)
-        cimod = Module()
-        cimod.add(VMovB32(dst=vgpr(Holder(name="ValuC")), src=vgpr("ValuC+%u"%srcIdx), comment="Rearrange MI out reg"))
-        cimod.addInst(VMovB32(dst=vgpr(Holder(name="ValuC+1")), src=vgpr("ValuC+%u"%(srcIdx+accImOffset)), comment="Rearrange MI out reg"))
-        imod.itemList[destIdx] = cimod
-    elif kernel["ProblemType"]["ComputeDataType"].isDoubleComplex():
-      accImOffset = accVgprImagNumOffset(kernel, lrvwB)
-      cimod = Module()
-      # tmp1 = a.real * b.real
-      cimod.add(VLShiftLeftB64(dst=vgpr(Holder(name="ValuC"), 2), shiftHex=0, src=vgpr("ValuC+%u"%srcIdx,2), comment="Rearrange MI out reg"))
-      # tmp2 = a.imag * b.real
-      cimod.add(VLShiftLeftB64(dst=vgpr(Holder(name="ValuC+2"), 2), shiftHex=0, src=vgpr("ValuC+%u"%(srcIdx+accImOffset),2), comment="Rearrange MI out reg"))
-      imod.itemList[destIdx] = cimod
-
-  return imod
-

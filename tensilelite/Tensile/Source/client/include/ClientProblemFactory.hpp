@@ -77,9 +77,7 @@ namespace Tensile
             bool m_cEqualsD;
             bool m_useBias;
             int  m_biasSrc;
-            bool m_useScaleAB;
-            bool m_useScaleCD;
-            bool m_useScaleAlphaVec;
+            bool m_useScaleDVec;
             bool m_useE;
             bool m_useGradient = false;
 
@@ -89,14 +87,12 @@ namespace Tensile
             bool                             m_fp16AltImpl;
             ActivationType                   m_activationType;
             std::vector<DataType>            m_biasTypeArgs;
+            bool                             m_activationHPA;
             bool                             m_activationNoGuard;
             std::vector<ActivationType>      m_activationEnumArg;
             size_t                           m_maxWorkspaceSize = 0;
-            DataType                         m_computeInputType;
             DataType                         m_f32XdlMathOp;
-            DataType                         m_activationComputeType;
             std::vector<std::vector<size_t>> m_problemSizes;
-            bool                             m_useUserArgs;
         };
 
     } // namespace Client

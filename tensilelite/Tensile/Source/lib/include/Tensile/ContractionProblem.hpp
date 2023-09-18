@@ -118,38 +118,15 @@ namespace Tensile
             return m_f32XdlMathOp;
         }
 
-        void setComputeInputType(DataType value)
-        {
-            m_computeInputType = value;
-        }
-
-        DataType computeInputType() const
-        {
-            return m_computeInputType;
-        }
-
-        void setUseDeviceUserArguments(bool use)
-        {
-            m_useDeviceUserArguments = use;
-        }
-
-        bool getUseDeviceUserArguments() const
-        {
-            return m_useDeviceUserArguments;
-        }
-
     protected:
         friend class ContractionProblemGemm;
         std::vector<TensorDescriptor> m_tensors;
         std::vector<std::string>      m_names;
 
-        size_t m_workspaceSize            = std::numeric_limits<size_t>::max();
-        size_t m_workspaceSizeGroupedGemm = std::numeric_limits<size_t>::max();
+        size_t m_workspaceSize;
+        size_t m_workspaceSizeGroupedGemm;
 
         DataType m_f32XdlMathOp;
-        DataType m_computeInputType;
-
-        bool m_useDeviceUserArguments = false;
     };
 
     /**
@@ -163,18 +140,14 @@ namespace Tensile
     public:
         enum TENSOR : int
         {
-            A             = 0,
-            B             = 1,
-            C             = 2,
-            D             = 3,
-            E             = 4,
-            BIAS          = 5,
-            SCALEA        = 6,
-            SCALEB        = 7,
-            SCALEC        = 8,
-            SCALED        = 9,
-            SCALEALPHAVEC = 10,
-            METADATA      = 11,
+            A         = 0,
+            B         = 1,
+            C         = 2,
+            D         = 3,
+            E         = 4,
+            BIAS      = 5,
+            SCALEDVEC = 6,
+            METADATA  = 7,
             TENSOR_COUNT
         };
 
@@ -405,11 +378,7 @@ namespace Tensile
                                TensorDescriptor const& d,
                                TensorDescriptor const& e,
                                TensorDescriptor const& bias,
-                               TensorDescriptor const& scaleA,
-                               TensorDescriptor const& scaleB,
-                               TensorDescriptor const& scaleC,
-                               TensorDescriptor const& scaleD,
-                               TensorDescriptor const& scaleAlphaVec,
+                               TensorDescriptor const& scaleDVec,
                                FreeIndices const&      freeIndices,
                                BatchIndices const&     batchIndices,
                                BoundIndices const&     boundIndices,
@@ -520,19 +489,9 @@ namespace Tensile
             m_useBias = useBias;
         }
 
-        void setUseScaleAB(bool useScaleAB)
+        void setUseScaleDVec(bool useScaleDVec)
         {
-            m_useScaleAB = useScaleAB;
-        }
-
-        void setUseScaleCD(bool useScaleCD)
-        {
-            m_useScaleCD = useScaleCD;
-        }
-
-        void setUseScaleAlphaVec(bool useScaleAlphaVec)
-        {
-            m_useScaleAlphaVec = useScaleAlphaVec;
+            m_useScaleDVec = useScaleDVec;
         }
 
         bool useE() const
@@ -545,19 +504,9 @@ namespace Tensile
             return m_useBias;
         }
 
-        bool useScaleAB() const
+        bool useScaleDVec() const
         {
-            return m_useScaleAB;
-        }
-
-        bool useScaleCD() const
-        {
-            return m_useScaleCD;
-        }
-
-        bool useScaleAlphaVec() const
-        {
-            return m_useScaleAlphaVec;
+            return m_useScaleDVec;
         }
 
         void setE(DataType                   type,
@@ -576,7 +525,6 @@ namespace Tensile
 
         void setBias(DataType                       type,
                      size_t                         length,
-                     size_t                         stride,
                      bool                           isOutput = false,
                      ContractionProblemGemm::TENSOR src      = ContractionProblemGemm::TENSOR::D)
         {
@@ -584,32 +532,8 @@ namespace Tensile
             m_biasSrc  = src;
             if(type != DataType::None && m_useBias)
             {
-                size_t batchIdx = 2;
-                for(size_t j = 0; j < m_batchIndices.size(); j++)
-                {
-                    switch(m_biasSrc)
-                    {
-                    case 0:
-                        batchIdx = m_batchIndices[j].a;
-                        break;
-                    case 1:
-                        batchIdx = m_batchIndices[j].b;
-                        break;
-                    case 2:
-                        batchIdx = m_batchIndices[j].c;
-                        break;
-                    case 3:
-                        batchIdx = m_batchIndices[j].d;
-                        break;
-                    default:
-                        break;
-                    }
-                }
                 m_tensors[ContractionProblemGemm::TENSOR::BIAS]
-                    = {"bias",
-                       m_biasType,
-                       {length, 1, m_tensors[m_biasSrc].sizes()[batchIdx]},
-                       {1, length, stride}};
+                    = {"bias", m_biasType, {length}, {1, length}};
                 m_tensors[ContractionProblemGemm::TENSOR::BIAS].setAsOutput(isOutput);
             }
         }
@@ -624,53 +548,13 @@ namespace Tensile
             return m_biasSrc;
         }
 
-        void setScaleA(DataType type)
+        void setScaleDVec(DataType type, size_t length)
         {
-            m_scaleAType = type;
-            if(type != DataType::None && m_useScaleAB)
+            m_scaleDVecType = type;
+            if(type != DataType::None && m_useScaleDVec)
             {
-                m_tensors[ContractionProblemGemm::TENSOR::SCALEA]
-                    = {"scaleA", m_scaleAType, {1}, {1, 1}};
-            }
-        }
-
-        void setScaleB(DataType type)
-        {
-            m_scaleBType = type;
-            if(type != DataType::None && m_useScaleAB)
-            {
-                m_tensors[ContractionProblemGemm::TENSOR::SCALEB]
-                    = {"scaleB", m_scaleBType, {1}, {1, 1}};
-            }
-        }
-
-        void setScaleC(DataType type)
-        {
-            m_scaleCType = type;
-            if(type != DataType::None && m_useScaleCD)
-            {
-                m_tensors[ContractionProblemGemm::TENSOR::SCALEC]
-                    = {"scaleC", m_scaleCType, {1}, {1, 1}};
-            }
-        }
-
-        void setScaleD(DataType type)
-        {
-            m_scaleDType = type;
-            if(type != DataType::None && m_useScaleCD)
-            {
-                m_tensors[ContractionProblemGemm::TENSOR::SCALED]
-                    = {"scaleD", m_scaleDType, {1}, {1, 1}};
-            }
-        }
-
-        void setScaleAlphaVec(DataType type, size_t length)
-        {
-            m_scaleAlphaVecType = type;
-            if(type != DataType::None && m_useScaleAlphaVec)
-            {
-                m_tensors[ContractionProblemGemm::TENSOR::SCALEALPHAVEC]
-                    = {"scaleAlphaVec", m_scaleAlphaVecType, {length}, {1, length}};
+                m_tensors[ContractionProblemGemm::TENSOR::SCALEDVEC]
+                    = {"scaleDVec", m_scaleDVecType, {length}, {1, length}};
             }
         }
 
@@ -784,14 +668,14 @@ namespace Tensile
             return m_activationType;
         }
 
-        void setActivationComputeType(DataType value)
+        void setActivationHPA(bool value)
         {
-            m_activationComputeType = value;
+            m_activationHPA = value;
         }
 
-        DataType activationComputeType() const
+        bool activationHPA() const
         {
-            return m_activationComputeType;
+            return m_activationHPA;
         }
 
         void setActivationNoGuard(bool value)
@@ -863,10 +747,7 @@ namespace Tensile
         {
             return m_tensors[ContractionProblemGemm::TENSOR::METADATA];
         }
-        TensorDescriptor const& bias() const
-        {
-            return m_tensors[ContractionProblemGemm::TENSOR::BIAS];
-        }
+
         FreeIndices const& freeIndicesA() const
         {
             return m_freeIndicesA;
@@ -954,7 +835,7 @@ namespace Tensile
             size_t                   numAll = getAdditionalArgNum(ActivationType::All);
             std::vector<std::string> s      = generateArgNameList(numAll, "activation");
             size_t                   i      = 0;
-            if(m_activationComputeType == m_betaType)
+            if(m_activationHPA)
             {
                 for(i = 0; i < num; i++)
                     c.push_back({s[i], m_betaType});
@@ -977,21 +858,6 @@ namespace Tensile
                            double              beta,
                            size_t              workspaceSize);
 
-        static ContractionProblemGemm createDefaultProblem(bool     transA,
-                                                           bool     transB,
-                                                           DataType typeA,
-                                                           DataType typeB,
-                                                           DataType typeC,
-                                                           DataType typeD,
-                                                           DataType alphaType,
-                                                           DataType betaType,
-                                                           DataType typeComputeInput,
-                                                           DataType typeCompute,
-                                                           double   alpha,
-                                                           double   beta,
-                                                           bool     isGroupedGemm,
-                                                           size_t   maxWorkspaceBytes);
-
     private:
         std::string m_sumNames;
         std::string m_operationIdentifier;
@@ -1006,26 +872,20 @@ namespace Tensile
         bool           m_useGradient             = false;
         bool           m_useE                    = false;
         bool           m_useBias                 = false;
-        bool           m_useScaleAB              = false;
-        bool           m_useScaleCD              = false;
-        bool           m_useScaleAlphaVec        = false;
+        bool           m_useScaleDVec            = false;
         ActivationType m_activationType          = ActivationType::None;
         ActivationType m_activationEnumArg       = ActivationType::None;
+        bool           m_activationHPA           = false;
         bool           m_activationNoGuard       = false;
         bool           m_aSparse                 = false;
 
         KernelLanguage    m_kernelLanguage    = KernelLanguage::Any;
         PerformanceMetric m_performanceMetric = PerformanceMetric::DeviceEfficiency;
 
-        DataType m_alphaType         = DataType::None; // if not assigned, will follow d-type
-        DataType m_betaType          = DataType::None; // for bwd-compatible
-        DataType m_biasType          = DataType::None;
-        DataType m_scaleAType        = DataType::None; // if not assigned, will follow alpha-type
-        DataType m_scaleBType        = DataType::None; // if not assigned, will follow alpha-type
-        DataType m_scaleCType        = DataType::None; // if not assigned, will follow beta-type
-        DataType m_scaleDType        = DataType::None; // if not assigned, will follow beta-type
-        DataType m_scaleAlphaVecType = DataType::None; // if not assigned, will follow alpha-type
-        DataType m_activationComputeType = DataType::None;
+        DataType m_alphaType     = DataType::None; // if not assigned, will follow d-type
+        DataType m_betaType      = DataType::None; // for bwd-compatible
+        DataType m_biasType      = DataType::None;
+        DataType m_scaleDVecType = DataType::None; // if not assigned, will follow alpha-type
 
         ContractionProblemGemm::TENSOR m_biasSrc = ContractionProblemGemm::TENSOR::D;
 
@@ -1102,12 +962,7 @@ namespace Tensile
                           void const* const*   _batchC,
                           void* const*         _batchD,
                           void const*          _bias,
-                          void const* const*   _batchBias,
-                          void const*          _scaleA,
-                          void const*          _scaleB,
-                          void const*          _scaleC,
-                          void const*          _scaleD,
-                          void const*          _scaleAlphaVec,
+                          void const*          _scaleDVec,
                           void*                _ws,
                           unsigned char const* _metadata);
 
@@ -1118,18 +973,13 @@ namespace Tensile
         void*       d = nullptr;
         void*       e = nullptr;
 
-        void const* const* batchA    = nullptr;
-        void const* const* batchB    = nullptr;
-        void const* const* batchC    = nullptr;
-        void* const*       batchD    = nullptr;
-        void const* const* batchBias = nullptr;
+        void const* const* batchA = nullptr;
+        void const* const* batchB = nullptr;
+        void const* const* batchC = nullptr;
+        void* const*       batchD = nullptr;
 
-        void const* bias          = nullptr;
-        void const* scaleA        = nullptr;
-        void const* scaleB        = nullptr;
-        void const* scaleC        = nullptr;
-        void const* scaleD        = nullptr;
-        void const* scaleAlphaVec = nullptr;
+        void const* bias      = nullptr;
+        void const* scaleDVec = nullptr;
 
         // Constants
         ConstantVariant              alpha = static_cast<float>(0);

@@ -56,16 +56,8 @@ namespace Tensile
             return "BFloat16";
         case DataType::Int8:
             return "Int8";
-        case DataType::Float8:
-            return "Float8";
-        case DataType::BFloat8:
-            return "BFloat8";
         case DataType::XFloat32:
             return "XFloat32";
-        case DataType::Float8BFloat8:
-            return "Float8BFloat8";
-        case DataType::BFloat8Float8:
-            return "BFloat8Float8";
         case DataType::Count:;
         }
         return "Invalid";
@@ -93,16 +85,8 @@ namespace Tensile
             return "B";
         case DataType::Int8:
             return "I8";
-        case DataType::Float8:
-            return "F8";
-        case DataType::BFloat8:
-            return "B8";
         case DataType::XFloat32:
             return "X";
-        case DataType::Float8BFloat8:
-            return "F8B8";
-        case DataType::BFloat8Float8:
-            return "B8F8";
         case DataType::Count:;
         }
         return "Invalid";
@@ -130,16 +114,8 @@ namespace Tensile
             return TypeInfo<BFloat16>::ElementSize;
         case DataType::Int8:
             return TypeInfo<int8_t>::ElementSize;
-        case DataType::Float8:
-            return TypeInfo<Float8>::ElementSize;
-        case DataType::BFloat8:
-            return TypeInfo<BFloat8>::ElementSize;
         case DataType::XFloat32:
             return TypeInfo<XFloat32>::ElementSize;
-        case DataType::Float8BFloat8:
-            return TypeInfo<Float8BFloat8>::ElementSize;
-        case DataType::BFloat8Float8:
-            return TypeInfo<BFloat8Float8>::ElementSize;
         case DataType::Count:;
         }
         return 1;
@@ -177,11 +153,7 @@ namespace Tensile
         registerTypeInfo<int32_t>();
         registerTypeInfo<BFloat16>();
         registerTypeInfo<int8_t>();
-        registerTypeInfo<Float8>();
-        registerTypeInfo<BFloat8>();
         registerTypeInfo<XFloat32>();
-        registerTypeInfo<Float8BFloat8>();
-        registerTypeInfo<BFloat8Float8>();
     }
 
     void DataTypeInfo::registerAllTypeInfoOnce()
@@ -310,10 +282,6 @@ namespace Tensile
             return (*std::get_if<BFloat16>(&d)) == BFloat16(value);
         case static_cast<int>(DataType::Int8):
             return (*std::get_if<int8_t>(&d)) == int8_t(value);
-        case static_cast<int>(DataType::Float8):
-            return (*std::get_if<Float8>(&d)) == Float8(static_cast<float>(value));
-        case static_cast<int>(DataType::BFloat8):
-            return (*std::get_if<BFloat8>(&d)) == BFloat8(static_cast<float>(value));
         default:
             throw std::runtime_error("Unsupported variant cast type.");
         }

@@ -106,9 +106,9 @@ struct _rocblaslt_handle
 struct _rocblaslt_matrix_layout
 {
     // constructor
-    _rocblaslt_matrix_layout() = default;
+    _rocblaslt_matrix_layout(){};
     // destructor
-    ~_rocblaslt_matrix_layout() = default;
+    ~_rocblaslt_matrix_layout(){};
 
     // num rows
     uint64_t m = 0;
@@ -117,10 +117,9 @@ struct _rocblaslt_matrix_layout
     // leading dimension
     int64_t ld = 0;
     // data type of the matrix
-    hipblasltDatatype_t type;
-    int32_t             batch_count  = 1;
-    int64_t             batch_stride = 0;
-    hipblasLtOrder_t    order        = HIPBLASLT_ORDER_COL;
+    hipblasDatatype_t type;
+    int32_t           batch_count  = 1;
+    int64_t           batch_stride = 0;
 };
 
 /********************************************************************************
@@ -143,21 +142,16 @@ struct _rocblaslt_matmul_desc
     // epilogue operation
     rocblaslt_epilogue epilogue = ROCBLASLT_EPILOGUE_DEFAULT;
     // bias vector pointer
-    void*               bias        = nullptr;
-    void*               scaleA      = nullptr;
-    void*               scaleB      = nullptr;
-    void*               scaleC      = nullptr;
-    void*               scaleD      = nullptr;
-    void*               scaleE      = nullptr;
-    void*               pointermode = nullptr;
-    hipblasltDatatype_t bias_type   = static_cast<hipblasltDatatype_t>(0);
+    void*             bias      = nullptr;
+    void*             scaleDVec = nullptr;
+    hipblasDatatype_t bias_type = static_cast<hipblasDatatype_t>(0);
     // E
     void*   e        = nullptr;
     int64_t lde      = 0;
     int64_t stride_e = 0;
     //
     rocblaslt_compute_type compute_type;
-    hipblasltDatatype_t    scale_type;
+    hipblasDatatype_t      scale_type;
 
     std::shared_ptr<void> m_data; // Tensile data
 };

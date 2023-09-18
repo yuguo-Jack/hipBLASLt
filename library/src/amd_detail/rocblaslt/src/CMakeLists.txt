@@ -80,8 +80,6 @@ if( BUILD_WITH_TENSILE )
     )
   endif()
 
-  TensileCreateExtOpLibraries("${PROJECT_BINARY_DIR}/Tensile/library" "${Tensile_ARCHITECTURE}")
-
   # Create a unique name for TensileHost compiled for rocBLAS
   set_target_properties( TensileHost PROPERTIES OUTPUT_NAME rocblaslt-tensile CXX_EXTENSIONS NO )
 
@@ -112,6 +110,5 @@ set(rocblaslt_source
   src/amd_detail/rocblaslt/src/rocblaslt_auxiliary.cpp
   src/amd_detail/rocblaslt/src/rocblaslt_mat.cpp
   src/amd_detail/rocblaslt/src/utility.cpp
-  src/amd_detail/rocblaslt/src/rocblaslt_transform.cpp
   ${Tensile_SRC}
 )

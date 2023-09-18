@@ -42,20 +42,16 @@ inline bool isAligned(const void* pointer, size_t byte_count)
 }
 
 // return precision string for rocblaslt_datatype
-constexpr const char* rocblaslt_datatype_string(hipblasltDatatype_t type)
+constexpr const char* rocblaslt_datatype_string(hipblasDatatype_t type)
 {
     switch(type)
     {
-    case HIPBLASLT_R_16F:
+    case HIPBLAS_R_16F:
         return "f16_r";
-    case HIPBLASLT_R_32F:
+    case HIPBLAS_R_32F:
         return "f32_r";
-    case HIPBLASLT_R_16B:
+    case HIPBLAS_R_16B:
         return "b16_r";
-    case HIPBLASLT_R_32I:
-        return "i32_r";
-    case HIPBLASLT_R_8I:
-        return "i8_r";
     default:
         return "invalidType";
     }
@@ -70,8 +66,6 @@ constexpr const char* rocblaslt_compute_type_string(rocblaslt_compute_type type)
         return "f32";
     case rocblaslt_compute_f32_fast_xf32:
         return "xf32";
-    case rocblaslt_compute_i32:
-        return "i32";
     default:
         return "invalidType";
     }
@@ -139,7 +133,7 @@ static constexpr char rocblaslt_precision_string<uint32_t>[] = "u32_r";
 
 std::string prefix(const char* layer, const char* caller);
 
-const char* hipblasltDatatype_to_string(hipblasltDatatype_t type);
+const char* hipblasDatatype_to_string(hipblasDatatype_t type);
 
 const char* rocblaslt_compute_type_to_string(rocblaslt_compute_type type);
 
@@ -329,7 +323,6 @@ inline bool rocblaslt_enum_utils::is_invalid(rocblaslt_compute_type value_)
     {
     case rocblaslt_compute_f32:
     case rocblaslt_compute_f32_fast_xf32:
-    case rocblaslt_compute_i32:
         return false;
     default:
         return true;
@@ -398,7 +391,9 @@ inline bool is_act_enabled(rocblaslt_epilogue value_)
 {
     switch(value_)
     {
+    case ROCBLASLT_EPILOGUE_DEFAULT:
     case ROCBLASLT_EPILOGUE_RELU:
+    case ROCBLASLT_EPILOGUE_BIAS:
     case ROCBLASLT_EPILOGUE_RELU_BIAS:
     case ROCBLASLT_EPILOGUE_GELU:
     case ROCBLASLT_EPILOGUE_GELU_BIAS:
@@ -406,20 +401,6 @@ inline bool is_act_enabled(rocblaslt_epilogue value_)
     case ROCBLASLT_EPILOGUE_GELU_AUX_BIAS:
     case ROCBLASLT_EPILOGUE_DGELU:
     case ROCBLASLT_EPILOGUE_DGELU_BGRAD:
-        return true;
-    case ROCBLASLT_EPILOGUE_DEFAULT:
-    case ROCBLASLT_EPILOGUE_BIAS:
-    default:
-        return false;
-    }
-};
-
-inline bool is_biasSrc_AB(rocblaslt_epilogue value_)
-{
-    switch(value_)
-    {
-    case ROCBLASLT_EPILOGUE_BGRADA:
-    case ROCBLASLT_EPILOGUE_BGRADB:
         return true;
     default:
         return false;

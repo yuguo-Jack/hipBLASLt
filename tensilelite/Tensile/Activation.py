@@ -139,7 +139,6 @@ class ActivationType:
                           ('sigmoid',     ActivationTypeRegister('sigmoid', False, 0,     True,  True, False,   False, False, False, False)), \
                           ('tanh',        ActivationTypeRegister('tanh', False, 2,        True,  True, False,   False, False, False, False)), \
                           ('dgelu',       ActivationTypeRegister('dgelu', True, 0,       False,  True, False,   False, False, False, False)), \
-                          ('geluscaling', ActivationTypeRegister('geluscaling', False, 1, True,  True, False,   False, False, False, False)), \
                           ('all',         ActivationTypeRegister('all', False, 0)) ])
 
     def __init__(self, value):
@@ -210,14 +209,6 @@ class ActivationType:
             return self.value == other.value
         else:
             raise RuntimeError("Unrecognized type in rhs, should be string or ActivationType")
-    def __lt__(self, other):
-        if isinstance(other, str):
-            return self.value < other.lower()
-        elif isinstance(other, ActivationType):
-            return self.value < other.value
-        else:
-            raise RuntimeError("Unrecognized type in rhs, should be string or ActivationType")
-
     def toEnum(self):
         return self.value.capitalize()
 
@@ -299,8 +290,6 @@ class ActivationModule:
             module = self.getExpModule(cDataType, vgprIn, vgprOut)
         elif (activationType == 'gelu'):
             module = self.getGeluModule(cDataType, vgprIn, vgprOut)
-        elif (activationType == 'geluscaling'):
-            module = self.getGeluModule(cDataType, vgprIn, vgprOut, "activationAlpha")
         elif (activationType == 'leakyrelu'):
             module = self.getLeakyReluModule(cDataType, vgprIn, vgprOut, "activationAlpha")
         elif (activationType == 'relu'):
@@ -486,16 +475,14 @@ class ActivationModule:
             raise RuntimeError("Unsupported data type %s."%cDataType.toDevice("HIP"))
         return module
 
-    def getGeluModule(self, cDataType, vgprIn, vgprOut, activationAlpha=None):
+    def getGeluModule(self, cDataType, vgprIn, vgprOut):
         self.needCombine = True
         module = Module("Gelu")
         # Gelu(x) = 0.5 * x * (1 + tanh(k0 * x * (1 + k1 * x * x)))
         if cDataType.isHalf():
             flt16GeluK1Str = HexToStr(cDataType, self.usePK, ActivationMagicNumbers["Float16GeluK1"])
             sgprMagicK1 = self.getSgpr(1)
-            sgprPKLiteral = self.getSgpr(1)
             module.add(SMovB32(dst=sgpr(Holder(idx=sgprMagicK1)), src=flt16GeluK1Str, comment="Float16GeluK1" ))
-            module.add(SMovB32(dst=sgpr(Holder(idx=sgprPKLiteral)), src=coef.f))
             vgprTemp = self.getVgpr(1)
             if self.usePK:
                 module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=self.vgprPrefix(vgprIn), comment="x * x" ))
@@ -503,35 +490,23 @@ class ActivationModule:
                                      vop3=VOP3PModifiers(op_sel_hi=[1,1,0,1]), comment="x^2 * k1 + 1"))
                 module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=vgpr(Holder(idx=vgprTemp)), comment="x * (x^2 * k1 + 1)"))
                 coef = floatUnion(u=ActivationMagicNumbers["FloatGeluK0"])
-                module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=sgpr(Holder(idx=sgprPKLiteral)), src1=vgpr(Holder(idx=vgprTemp)), comment="k0 * x * (x^2 * k1 + 1)"))
+                module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=coef.f, src1=vgpr(Holder(idx=vgprTemp)), comment="k0 * x * (x^2 * k1 + 1)"))
                 module.add(self.getTanhModule(cDataType, Holder(idx=vgprTemp), Holder(idx=vgprTemp), "", ""))
                 module.add(VAddPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=1.0, src1=vgpr(Holder(idx=vgprTemp)), \
                                      vop3=VOP3PModifiers(op_sel_hi=[0,1,1]), comment="1 + tanh(...)" ))
                 module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=vgpr(Holder(idx=vgprTemp)), comment="x * (1 + tanh(...))"))
-
-                if activationAlpha == None:
-                    module.add(VMulPKF16(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), \
-                                    vop3=VOP3PModifiers(op_sel_hi=[0,1,1]), comment="0.5 * x * (1 + tanh(...))"))
-                else:
-                    module.add(VMulPKF16(dst=vgpr(Holder(idx=vgprTemp)), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), \
-                                    vop3=VOP3PModifiers(op_sel_hi=[0,1,1]), comment="0.5 * x * (1 + tanh(...))"))
-                    module.add(VMulPKF16(dst=self.vgprPrefix(vgprOut), src0=sgpr(activationAlpha), src1=vgpr(Holder(idx=vgprTemp)), \
-                                        vop3=VOP3PModifiers(op_sel_hi=[0,1,1]), comment="0.5 * x * (1 + tanh(...)) * scale"))
-
+                module.add(VMulPKF16(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), \
+                                     vop3=VOP3PModifiers(op_sel_hi=[0,1,1]), comment="0.5 * x * (1 + tanh(...))"))
             else:
                 module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=self.vgprPrefix(vgprIn), comment="x * x" ))
                 module.add(VFmaF16(dst=vgpr(Holder(idx=vgprTemp)), src0=vgpr(Holder(idx=vgprTemp)), src1=sgpr(Holder(idx=sgprMagicK1)), src2=1.0, comment="x^2 * k1 + 1"))
                 module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=vgpr(Holder(idx=vgprTemp)), comment="x * (x^2 * k1 + 1)"))
                 coef = floatUnion(u=ActivationMagicNumbers["FloatGeluK0"])
-                module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=sgpr(Holder(idx=sgprPKLiteral)), src1=vgpr(Holder(idx=vgprTemp)), comment="k0 * x * (x^2 * k1 + 1)"))
+                module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=coef.f, src1=vgpr(Holder(idx=vgprTemp)), comment="k0 * x * (x^2 * k1 + 1)"))
                 module.add(self.getTanhModule(cDataType, Holder(idx=vgprTemp), Holder(idx=vgprTemp), "", ""))
                 module.add(VAddF16(dst=vgpr(Holder(idx=vgprTemp)), src0=1.0, src1=vgpr(Holder(idx=vgprTemp)), comment="1 + tanh(...)" ))
                 module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=vgpr(Holder(idx=vgprTemp)), comment="x * (1 + tanh(...))"))
-                if activationAlpha == None:
-                    module.add(VMulF16(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
-                else:
-                    module.add(VMulF16(dst=vgpr(Holder(idx=vgprTemp)), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
-                    module.add(VMulF16(dst=self.vgprPrefix(vgprOut), src0=sgpr(activationAlpha), src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...)) * scale"))
+                module.add(VMulF16(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
         elif cDataType.isSingle():
             vgprTemp = self.getVgpr(1)
             flt16GeluK1Str = HexToStr(cDataType, self.usePK, ActivationMagicNumbers["FloatGeluK1"])
@@ -543,11 +518,7 @@ class ActivationModule:
             module.add(self.getTanhModule(cDataType, Holder(idx=vgprTemp), Holder(idx=vgprTemp), "", ""))
             module.add(VAddF32(dst=vgpr(Holder(idx=vgprTemp)), src0=1.0, src1=vgpr(Holder(idx=vgprTemp)), comment="1 + tanh(...)" ))
             module.add(VMulF32(dst=vgpr(Holder(idx=vgprTemp)), src0=self.vgprPrefix(vgprIn), src1=vgpr(Holder(idx=vgprTemp)), comment="x * (1 + tanh(...))"))
-            if activationAlpha == None:
-              module.add(VMulF32(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
-            else:
-                module.add(VMulF32(dst=vgpr(Holder(idx=vgprTemp)), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
-                module.add(VMulF32(dst=self.vgprPrefix(vgprOut), src0=sgpr(activationAlpha), src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...)) * scale"))
+            module.add(VMulF32(dst=self.vgprPrefix(vgprOut), src0=0.5, src1=vgpr(Holder(idx=vgprTemp)), comment="0.5 * x * (1 + tanh(...))"))
         else:
             raise RuntimeError("Unsupported data type %s."%cDataType.toDevice("HIP"))
         return module
@@ -862,22 +833,23 @@ def RemoveEmptyBlocks(module):
     return module
 
 def FuseInstruction(currentInst, moduleAndIndex, fuseDebug):
-    assert isinstance(currentInst, Instruction)
+    assert(isinstance(currentInst, Instruction))
     newInst = None
     # Fuses if v_add_f16 to v_fma_f16 if v_add_f16 is a self adding instruction.
     # Currently, we only fuse when the vgpr is add by 1 in both instructions.
     # ex. v_add_f16 v0, 1.0, v0
     #     +  v_fma_f16 v0, -2.0, v0, 1.0
     #     => v_fma_f16 v0, -2.0, v0, 2.0
-    if type(currentInst) in {VAddF16, VAddPKF16, VAddF32}:
-        isPK = type(currentInst) is VAddPKF16
+    if isinstance(currentInst, VAddF16) or isinstance(currentInst, VAddPKF16) or \
+       isinstance(currentInst, VAddF32):
+        isPK = isinstance(currentInst, VAddPKF16)
         outVgpr = currentInst.dst
         addConst = ""
         isSelfAddConst = False
         for param in currentInst.srcs:
             if param == outVgpr:
                 isSelfAddConst = True
-            if isinstance(param, (float, int)):
+            if (isinstance(param, float) or isinstance(param, int)):
                 if param == 1:
                     addConst = param
 
@@ -890,19 +862,20 @@ def FuseInstruction(currentInst, moduleAndIndex, fuseDebug):
                     func = VFmaF32
                 else:
                     assert("You should not reach here.")
-                if type(oldInst) is func and oldInst.srcs[2] == 1.0:
+                if isinstance(oldInst, func) and oldInst.srcs[2] == 1.0:
                     # Cannot fuse if the target instruction has any rvalue reassigned or its lvalue
                     # used before the current instruction
                     if not FindAssignAndUse(oldInst, currentInst, outVgpr, outVgpr):
-                        newInst = type(oldInst)(oldInst.dst, *oldInst.srcs, oldInst.sdwa)
+                        newInst = fastdeepcopy(oldInst)
                         newInst.srcs[2] = addConst + newInst.srcs[2]
                         newInst.comment += " ( + 1 (fused))"
                         replaceInst(currentInst, newInst, fuseDebug)
                         removeOldInst(oldInst, currentInst, newInst, fuseDebug)
     # Fuses if v_mul_f16 to v_mul_f16 if the later one is a self multiplying instruction.
     # Only fuses when both instructions multiply constant
-    elif type(currentInst) in {VMulF16, VMulPKF16, VMulF32, VMulF64}:
-        isPK = type(currentInst) is VMulPKF16
+    elif isinstance(currentInst, VMulF16) or isinstance(currentInst, VMulPKF16) or \
+         isinstance(currentInst, VMulF32) or isinstance(currentInst, VMulF64):
+        isPK = isinstance(currentInst, VMulPKF16)
         outVgpr = currentInst.dst
         mulConst = ""
         newFuseInst = ""
@@ -911,16 +884,16 @@ def FuseInstruction(currentInst, moduleAndIndex, fuseDebug):
             if param == outVgpr:
                 isSelfMulConst = True
             # The constant may be an sgpr
-            if type(param) is RegisterContainer and param.regType == 's':
+            if isinstance(param, RegisterContainer) and param.regType == 's':
                 oldInst = moduleAndIndex.get(param)
-                if type(oldInst) is SMovB32:
+                if isinstance(oldInst, SMovB32):
                     oldparam = oldInst.srcs[0]
-                    if oldInst.dst == param and isinstance(oldparam, (float, int)):
+                    if oldInst.dst == param and (isinstance(oldparam, float) or isinstance(oldparam, int)):
                         # Cannot fuse if another instruction is using the same sgpr before a new assignment occurs
                         if not FindUse(oldInst, currentInst, param):
                             mulConst = oldparam
                             newFuseInst = oldInst
-            if isinstance(param, (float, int)):
+            if (isinstance(param, float) or isinstance(param, int)):
                 mulConst = param
 
         if isSelfMulConst and mulConst:
@@ -935,13 +908,13 @@ def FuseInstruction(currentInst, moduleAndIndex, fuseDebug):
                 else:
                     assert("You should not reach here.")
 
-                if type(oldInst) is func:
+                if isinstance(oldInst, func):
                     # Cannot fuse if the target instruction has any rvalue reassigned or its lvalue
                     # used before the current instruction
                     if not FindAssignAndUse(oldInst, currentInst, outVgpr, outVgpr):
                         for paramIdx, param in enumerate(oldInst.srcs):
-                            if isinstance(param, (float, int)):
-                                newInst = type(oldInst)(oldInst.dst, *oldInst.srcs, oldInst.sdwa)
+                            if (isinstance(param, float) or isinstance(param, int)):
+                                newInst = fastdeepcopy(oldInst)
                                 newValue = param * mulConst
                                 formatting = " (fused %f)" if isinstance(param, float) else " (fused %d)"
                                 if newFuseInst:
@@ -1004,20 +977,18 @@ def FindAssignAndUseIter(startItem, endInst, assignVar, useVar):
     idx = -1
     isEnd = False
     isUse = False
-    if issubclass(type(startItem), Instruction):
+    if isinstance(startItem, Instruction):
         module = startItem.parent
         idx = module.items().index(startItem)
-    assert issubclass(type(module), Module)
-    moduleToIter = module.items()[idx + 1:]
-    if idx + 1 < len(moduleToIter):
-        for item in moduleToIter:
+    assert(isinstance(module, Module))
+    if idx + 1 < len(module.items()[idx + 1:]):
+        for item in module.items()[idx + 1:]:
             # Use
-            itemType = type(item)
             if item is endInst:
                 isEnd = True
-            elif itemType is SNop:
+            elif isinstance(item, SNop):
                 pass
-            elif issubclass(itemType, Instruction):
+            elif isinstance(item, Instruction):
                 if item.dst == assignVar:
                     isEnd = True
                     isUse = True
@@ -1028,7 +999,7 @@ def FindAssignAndUseIter(startItem, endInst, assignVar, useVar):
                             isEnd = True
                             isUse = True
                             break
-            elif issubclass(itemType, Module):
+            elif isinstance(item, Module):
                 isEnd, isUse = FindAssignAndUseIter(item, endInst, assignVar, useVar)
             if isEnd:
                 return isEnd, isUse
@@ -1206,12 +1177,6 @@ class ActivationInline:
       module = activation.getGeluModule(self.dataType, 0, 0)
       kStr += self.getActivationAsmStr(activation, module, (len(asm) * " "))
       kStr += addSpace(asm, ": \"+v\"(value) : \n")
-      kStr += self.getRequiredRegStr(asm, activation.vgprCounter, activation.sgprCounter)
-    elif (activationType == 'geluscaling'):
-      kStr += (asm + " // geluscaling\n")
-      module = activation.getGeluModule(self.dataType, 0, 0, 1)
-      kStr += self.getActivationAsmStr(activation, module, (len(asm) * " "))
-      kStr += addSpace(asm, ": \"+v\"(value) : \"s\"(alpha)\n")        
       kStr += self.getRequiredRegStr(asm, activation.vgprCounter, activation.sgprCounter)
     elif (activationType == 'leakyrelu'):
       if (self.dataType.isSingle() or self.dataType.isHalf() or self.dataType.isDouble()):

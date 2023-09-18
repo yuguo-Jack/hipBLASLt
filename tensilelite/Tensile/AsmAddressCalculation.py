@@ -34,7 +34,7 @@ class AddrCalculation:
     #    packed index for the 0 coordinate of the C/D matrix.
     # coord1Vgpr : VGPR which tracks the last coord1 calculation.
     #          If this is new coord1, just overwrite it with latest calc.
-    def __init__(self, kernelWriter, ss, addrCVgpr, addrDVgpr, addrEVgpr, addrBiasVgpr, addrScaleAlphaVecVgpr, element, \
+    def __init__(self, kernelWriter, ss, addrCVgpr, addrDVgpr, addrEVgpr, addrBiasVgpr, addrScaleDVecVgpr, element, \
         coordOffset0, coord1Vgpr, coordOffset1, rowInc, newCoord1):
         self.kernelWriter = kernelWriter
 
@@ -43,7 +43,7 @@ class AddrCalculation:
         self.addrDVgpr    = addrDVgpr
         self.addrCVgpr    = addrCVgpr
         self.addrBiasVgpr = addrBiasVgpr
-        self.addrScaleAlphaVecVgpr = addrScaleAlphaVecVgpr
+        self.addrScaleDVecVgpr = addrScaleDVecVgpr
         self.coord1Vgpr = coord1Vgpr # vgpr that stores coord1Vgpr
 
         self.element = element
@@ -56,13 +56,13 @@ class AddrCalculation:
         if ss.optSingleColVgpr:
             # optimized stores use the load offset for coordOffset0 calculations.
             self.biasOffset   = coordOffset0 * kernelWriter.states.bpeCinternal
-            self.scaleAlphaVecOffset   = coordOffset0 * kernelWriter.states.bpeCinternal
+            self.scaleDVecOffset   = coordOffset0 * kernelWriter.states.bpeCinternal
             self.globalOffset  = coordOffset0 * kernelWriter.states.bpeCexternal
             self.globalOffsetInternal = coordOffset0 * kernelWriter.states.bpeCinternal
         else:
             # else non-opt stores include the coord0 offset into VGPR address calcs
             self.biasOffset   = 0
-            self.scaleAlphaVecOffset   = 0
+            self.scaleDVecOffset   = 0
             self.globalOffset = 0
             self.globalOffsetInternal = 0
 
@@ -228,7 +228,7 @@ class AddrCalculation:
         updatedAddr = False
 
         # scale and set final address:
-        stride0 = kw.strideRef('D', 0) if ((tc == 'Bias') or (tc == 'ScaleAlphaVec')) else kw.strideRef(tc, 0)
+        stride0 = kw.strideRef('D', 0) if ((tc == 'Bias') or (tc == 'ScaleDVec')) else kw.strideRef(tc, 0)
         if kw.isConstUnitStride(stride0):
             elementVgpr = self.coord0Vgpr
         else:
@@ -262,17 +262,12 @@ class AddrCalculation:
                                                 shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                                 src=vgpr(self.addrBiasVgpr), \
                                                 comment="Bias address scaled by BPE"))
-                        if kernel["LdsOffsetBias"] != 0:
-                          module.add(VAddU32(dst=vgpr(self.addrBiasVgpr), \
-                                             src0=(kernel["LdsOffsetBias"]*kernel["ProblemType"]["DataType"].numBytes()), \
-                                             src1=vgpr(self.addrBiasVgpr), \
-                                             comment="add bias lds offset"))
                         return module
-                    if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
-                        module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
+                    if tc == 'ScaleDVec' and kernel["ProblemType"]["UseScaleDVec"] and (kernel["GlobalSplitU"] == 1):
+                        module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleDVecVgpr), \
                                                  shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                                  src=vgpr(self.coord0Vgpr), \
-                                                comment="ScaleAlphaVec address scaled by BPE"))
+                                                comment="ScaleDVec address scaled by BPE"))
                         return module
                     if tc == 'C':
                         ss.singleColCAddrUpdated    = True
@@ -297,17 +292,12 @@ class AddrCalculation:
                                             shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                             src=vgpr(self.addrBiasVgpr), \
                                             comment="Bias address scaled by BPE"))
-                    if kernel["LdsOffsetBias"] != 0:
-                        module.add(VAddU32(dst=vgpr(self.addrBiasVgpr), \
-                                           src0=(kernel["LdsOffsetBias"]*kernel["ProblemType"]["DataType"].numBytes()), \
-                                           src1=vgpr(self.addrBiasVgpr), \
-                                           comment="add bias lds offset"))
                     return module
-                if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
-                    module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
+                if tc == 'ScaleDVec' and kernel["ProblemType"]["UseScaleDVec"] and (kernel["GlobalSplitU"] == 1):
+                    module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleDVecVgpr), \
                                              shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                              src=vgpr(self.coord0Vgpr), \
-                                            comment="ScaleAlphaVec address scaled by BPE"))
+                                            comment="ScaleDVec address scaled by BPE"))
                     return module
                 packedIndices = kernel["PackedC0IndicesX"]
                 if len(packedIndices) > 1:
@@ -332,17 +322,12 @@ class AddrCalculation:
                                         shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                         src=vgpr(self.addrBiasVgpr), \
                                         comment="Bias address scaled by BPE"))
-                if kernel["LdsOffsetBias"] != 0:
-                    module.add(VAddU32(dst=vgpr(self.addrBiasVgpr), \
-                                       src0=(kernel["LdsOffsetBias"]*kernel["ProblemType"]["DataType"].numBytes()), \
-                                       src1=vgpr(self.addrBiasVgpr), \
-                                       comment="add bias lds offset"))
                 return module
-            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
-                module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
+            if tc == 'ScaleDVec' and kernel["ProblemType"]["UseScaleDVec"] and (kernel["GlobalSplitU"] == 1):
+                module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleDVecVgpr), \
                                          shiftHex=hex(log2(kw.states.bpeCinternal)), \
                                          src=vgpr(self.coord0Vgpr), \
-                                        comment="ScaleAlphaVec address scaled by BPE"))
+                                        comment="ScaleDVec address scaled by BPE"))
                 return module
             packedIndices = kernel["PackedC0IndicesX"]
             if len(packedIndices) > 1:
@@ -475,8 +460,7 @@ class AddrCalculation:
         #   For MFMA shift pointer, correct data is stored in another thread.
         #   Therefore, MFMA cannot use v_mov to amend store data
         #   It needs to modify the coord1 of thread directly.
-        # (Use ShiftVectorComponentsMFMA now)
-        if 0 and (not kernel["SourceSwap"]) and (not kernel["GuaranteeNoPartialB"]) and tPB["rtv"] and kernel["EnableMatrixInstruction"] and edge:
+        if (not kernel["SourceSwap"]) and (not kernel["GuaranteeNoPartialB"]) and tPB["rtv"] and kernel["EnableMatrixInstruction"] and edge:
             (d1,d0,vc1,vc0) = self.element
             if (d1 == vc1 == d0 == vc0 == 0) or self.newCoord1:
                 sgprCnt = self.kernelWriter.states.laneSGPRCount
@@ -489,7 +473,7 @@ class AddrCalculation:
                 strideW1 = "Size%s" % "I" if index == 0 else ("J" if index == 1 else (kw.states.indexChars[index]))
 
                 module.addComment1("shift vector components d1")
-                vw = kernel["GlobalReadVectorWidthB"]
+                vw = kernel["GlobalLoadVectorWidthB"]
                 vTmp1 = tmpVgpr
                 vTmp2 = tmpVgpr+1
                 sTmp1 = tmpS01
@@ -544,18 +528,19 @@ class AddrCalculation:
 
         return module
 
-    def emitLdChange(self, kernel, ss, tc, edge, beta, mask, bufferOOB, singleUpdate, tmpVgpr, tmpSgpr, addrVgpr, BufAddr):
+    def emitLdChange(self, kernel, ss, tc, edge, beta, mask, singleUpdate, tmpVgpr, tmpSgpr, addrVgpr, BufAddr):
         """
         Generate code for final C read/D write address
         """
 
         laneSGPRCount = self.kernelWriter.states.laneSGPRCount
+
         module = Module("emitLdChange")
         if kernel["BufferStore"]:
             module.add(self.emitScaleToBpe(kernel, ss, tmpVgpr, tmpSgpr, singleUpdate, tc))
             if edge and (not kernel["StoreRemapVectorWidth"] or (kernel["StoreRemapVectorWidth"] and beta)) and \
-                ((tc != 'Bias') and (tc != 'ScaleAlphaVec')):
-                module.add(VCndMaskB32(dst=vgpr(addrVgpr), src0=vgpr(bufferOOB), src1=vgpr(addrVgpr), \
+                ((tc != 'Bias') and (tc != 'ScaleDVec')):
+                module.add(VCndMaskB32(dst=vgpr(addrVgpr), src0=-1, src1=vgpr(addrVgpr), \
                                src2=sgpr(mask,laneSGPRCount), comment="LD%s clip if OOB. offset" % tc ))
         else:
             if tc == 'Bias' and kernel["ProblemType"]["UseBias"] and (kernel["GlobalSplitU"] == 1):
@@ -565,16 +550,11 @@ class AddrCalculation:
                                         shiftHex=hex(log2(self.kernelWriter.states.bpeCinternal)), \
                                         src=vgpr(self.addrBiasVgpr), \
                                         comment="Bias address scaled by BPE"))
-                if kernel["LdsOffsetBias"] != 0:
-                    module.add(VAddU32(dst=vgpr(self.addrBiasVgpr), \
-                                       src0=(kernel["LdsOffsetBias"]*kernel["ProblemType"]["DataType"].numBytes()), \
-                                       src1=vgpr(self.addrBiasVgpr), \
-                                       comment="add bias lds offset"))
-            if tc == 'ScaleAlphaVec' and kernel["ProblemType"]["UseScaleAlphaVec"] and (kernel["GlobalSplitU"] == 1):
-                module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleAlphaVecVgpr), \
+            if tc == 'ScaleDVec' and kernel["ProblemType"]["UseScaleDVec"] and (kernel["GlobalSplitU"] == 1):
+                module.add(VLShiftLeftB32(dst=vgpr(self.addrScaleDVecVgpr), \
                                         shiftHex=hex(log2(self.kernelWriter.states.bpeCinternal)), \
                                         src=vgpr(self.coord0Vgpr), \
-                                        comment="ScaleAlphaVec address scaled by BPE"))
+                                        comment="ScaleDVec address scaled by BPE"))
 
             else:
                 # store a copy of the offset in 2 of the tmpVgpr for D

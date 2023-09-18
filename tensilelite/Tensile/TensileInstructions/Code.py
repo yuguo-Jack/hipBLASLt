@@ -148,10 +148,13 @@ class Module(Item):
                 item.setInlineAsm(mode)
 
     def __str__(self):
-        prefix = f"// {self.name}{{\n" if printModuleNames else ""
-        suffix = f"// }} {self.name}\n" if printModuleNames else ""
-        s = "".join(str(x) for x in self.itemList)
-        return "".join((prefix, s, suffix))
+        s = ""
+        if printModuleNames:
+            s += "// %s { \n" % self.name
+        s += "".join([str(x) for x in self.itemList])
+        if printModuleNames:
+            s += "// } %s\n" % self.name
+        return s
 
     def addSpaceLine(self):
         self.itemList.append(TextBlock("\n"))
@@ -638,7 +641,7 @@ class _SignatureArgumentV3(_SignatureArgument):
 
 class _SignatureKernelDescriptorV3(Item):
     def __init__(self, name, groupSegSize, sgprWorkGroup, vgprWorkItem, \
-        totalVgprs: int=0, totalAgprs: int=0, totalSgprs: int =0, preloadKernArgs: bool=False):
+        totalVgprs: int=0, totalAgprs: int=0, totalSgprs: int =0):
         super().__init__(name)
         # accumulator offset for Unified Register Files
         if self.archCaps["ArchAccUnifiedRegs"]:
@@ -653,7 +656,6 @@ class _SignatureKernelDescriptorV3(Item):
         self.groupSegSize = groupSegSize
         self.sgprWorkGroup = sgprWorkGroup
         self.vgprWorkItem = vgprWorkItem
-        self.enablePreloadKernArgs = preloadKernArgs
 
     def setGprs(self, totalVgprs: int, totalAgprs: int, totalSgprs: int):
         if self.archCaps["ArchAccUnifiedRegs"]:
@@ -697,11 +699,6 @@ class _SignatureKernelDescriptorV3(Item):
         kStr += kdIndent + ".amdhsa_system_vgpr_workitem_id %u\n" % self.vgprWorkItem
         kStr += kdIndent + ".amdhsa_float_denorm_mode_32 3\n"
         kStr += kdIndent + ".amdhsa_float_denorm_mode_16_64 3\n"
-        if self.enablePreloadKernArgs:
-            numWorkgroupSgpr = self.sgprWorkGroup[0] + self.sgprWorkGroup[1] + self.sgprWorkGroup[2]
-            kStr += kdIndent + ".amdhsa_user_sgpr_count %d\n" % (16-numWorkgroupSgpr)
-            kStr += kdIndent + ".amdhsa_user_sgpr_kernarg_preload_length %d\n" % (14-numWorkgroupSgpr)
-            kStr += kdIndent + ".amdhsa_user_sgpr_kernarg_preload_offset 0\n"
         kStr += ".end_amdhsa_kernel\n"
         kStr += ".text\n"
         kStr += block("Num VGPR   =%u"%self.originalTotalVgprs)
@@ -773,8 +770,7 @@ class SignatureCodeMetaV3(Item):
 
 class SignatureBase(Item):
     def __init__(self, kernelName, codeObjectVersion, groupSegmentSize, sgprWorkGroup, \
-        vgprWorkItem, flatWorkGroupSize, totalVgprs: int=0, totalAgprs: int=0, \
-        totalSgprs: int=0, preloadKernArgs: bool=False) -> None:
+        vgprWorkItem, flatWorkGroupSize, totalVgprs: int=0, totalAgprs: int=0, totalSgprs: int=0) -> None:
         super().__init__(kernelName)
         self.codeObjectVersion = codeObjectVersion
 
@@ -788,8 +784,7 @@ class SignatureBase(Item):
                                                                 totalSgprs=totalSgprs,
                                                                 groupSegSize=groupSegmentSize,
                                                                 sgprWorkGroup=sgprWorkGroup,
-                                                                vgprWorkItem=vgprWorkItem,
-                                                                preloadKernArgs=preloadKernArgs)
+                                                                vgprWorkItem=vgprWorkItem)
             self.codeMeta = SignatureCodeMetaV3(name=kernelName,
                                                 groupSegSize=groupSegmentSize,
                                                 totalVgprs=totalVgprs,

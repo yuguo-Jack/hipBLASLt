@@ -68,39 +68,39 @@ void run_function(const func_map& map, const Arguments& arg, const std::string& 
     auto match = map.find(arg.function);
     if(match == map.end())
         throw std::invalid_argument("Invalid combination --function "s + arg.function
-                                    + " --a_type "s + hipblaslt_datatype_to_string(arg.a_type)
-                                    + msg);
+                                    + " --a_type "s + hipblas_datatype_to_string(arg.a_type) + msg);
     match->second(arg);
 }
 
 // Template to dispatch testing_matmul for performance tests
-// the test is marked invalid when (TiA, TiB, To, Tc) not in (H/H/S, B/B/S)
-template <typename TiA, typename TiB = TiA, typename To = TiB, typename Tc = To, typename = void>
+// the test is marked invalid when (Ti, To, Tc) not in (H/H/S, B/B/S)
+template <typename Ti, typename To = Ti, typename Tc = To, typename = void>
 struct perf_matmul : hipblaslt_test_invalid
 {
 };
 
-template <typename TiA, typename TiB, typename To, typename Tc>
+template <typename Ti, typename To, typename Tc>
 struct perf_matmul<
-    TiA,
-    TiB,
+    Ti,
     To,
     Tc,
-    std::enable_if_t<(std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblasLtHalf>{})
-                     || (std::is_same<TiA, hip_bfloat16>{} && std::is_same<TiB, hip_bfloat16>{})
-                     || (std::is_same<TiA, float>{} && std::is_same<TiB, float>{})
-                     || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_f8>{})
-                     || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_bf8>{})
-                     || (std::is_same<TiA, hipblaslt_bf8>{} && std::is_same<TiB, hipblaslt_f8>{})
-                     || (std::is_same<TiA, double>{} && std::is_same<TiB, double>{})
-                     || (std::is_same<TiA, hipblasLtInt8>{} && std::is_same<TiB, hipblasLtInt8>{})
-                     || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblasLtHalf>{})
-                     || (std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblaslt_f8>{})>>
+    std::enable_if_t<
+#ifdef __HIP_PLATFORM_HCC__
+        (std::is_same<Ti, To>{}
+         && (std::is_same<Ti, hipblasLtHalf>{} || std::is_same<Ti, hip_bfloat16>{}
+             || std::is_same<Ti, float>{})
+         && std::is_same<Tc, float>{})
+#else
+        (std::is_same<Ti, To>{}
+         && ((std::is_same<Ti, hipblasLtHalf>{} && std::is_same<Tc, hipblasLtHalf>{})
+             || (std::is_same<Ti, hip_bfloat16>{} && std::is_same<Tc, hip_bfloat16>{})))
+#endif
+        || (std::is_same<Ti, To>{} && (std::is_same<Ti, int8_t>{}) && std::is_same<Tc, int32_t>{})>>
     : hipblaslt_test_valid
 {
     void operator()(const Arguments& arg)
     {
-        static const func_map map = {{"matmul", testing_matmul<TiA, TiB, To, Tc>}};
+        static const func_map map = {{"matmul", testing_matmul<Ti, To, Tc>}};
         run_function(map, arg);
     }
 };
@@ -135,74 +135,70 @@ int run_bench_test(Arguments& arg, const std::string& filter, bool any_stride, b
     }
 
     // adjust dimension for GEMM routines
-    size_t gemmNum = arg.grouped_gemm == 0 ? 1 : arg.grouped_gemm;
-    for(size_t i = 0; i < gemmNum; i++)
+    int64_t min_lda = arg.transA == 'N' ? arg.M : arg.K;
+    int64_t min_ldb = arg.transB == 'N' ? arg.K : arg.N;
+    int64_t min_ldc = arg.M;
+    int64_t min_ldd = arg.M;
+    int64_t min_lde = arg.M;
+    if(arg.lda < min_lda)
     {
-        int64_t min_lda = arg.transA == 'N' ? arg.M[i] : arg.K[i];
-        int64_t min_ldb = arg.transB == 'N' ? arg.K[i] : arg.N[i];
-        int64_t min_ldc = arg.M[i];
-        int64_t min_ldd = arg.M[i];
-        int64_t min_lde = arg.M[i];
-        if(arg.lda[i] < min_lda)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: lda < min_lda, set lda = " << min_lda << std::endl;
-            arg.lda[i] = min_lda;
-        }
-        if(arg.ldb[i] < min_ldb)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: ldb < min_ldb, set ldb = " << min_ldb << std::endl;
-            arg.ldb[i] = min_ldb;
-        }
-        if(arg.ldc[i] < min_ldc)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: ldc < min_ldc, set ldc = " << min_ldc << std::endl;
-            arg.ldc[i] = min_ldc;
-        }
-        if(arg.ldd[i] < min_ldd)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: ldd < min_ldd, set ldd = " << min_ldc << std::endl;
-            arg.ldd[i] = min_ldd;
-        }
-        if(arg.lde[i] < min_lde)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: lde < min_lde, set lde = " << min_lde << std::endl;
-            arg.lde[i] = min_lde;
-        }
-        int64_t min_stride_a = arg.lda[i] * (arg.transA == 'N' ? arg.K[i] : arg.M[i]);
-        int64_t min_stride_b = arg.ldb[i] * (arg.transB == 'N' ? arg.N[i] : arg.K[i]);
-        int64_t min_stride_c = arg.ldc[i] * arg.N[i];
-        int64_t min_stride_d = arg.ldd[i] * arg.N[i];
-        int64_t min_stride_e = arg.lde[i] * arg.N[i];
-        if(!any_stride && arg.stride_a[i] < min_stride_a)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: stride_a < min_stride_a, set stride_a = "
-            //               << min_stride_a << std::endl;
-            arg.stride_a[i] = min_stride_a;
-        }
-        if(!any_stride && arg.stride_b[i] < min_stride_b)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: stride_b < min_stride_b, set stride_b = "
-            //               << min_stride_b << std::endl;
-            arg.stride_b[i] = min_stride_b;
-        }
-        if(!any_stride && arg.stride_c[i] < min_stride_c)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: stride_c < min_stride_c, set stride_c = "
-            //               << min_stride_c << std::endl;
-            arg.stride_c[i] = min_stride_c;
-        }
-        if(!any_stride && arg.stride_d[i] < min_stride_d)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: stride_d < min_stride_d, set stride_d = "
-            //               << min_stride_d << std::endl;
-            arg.stride_d[i] = min_stride_d;
-        }
-        if(!any_stride && arg.stride_e[i] < min_stride_e)
-        {
-            //hipblaslt_cout << "hipblaslt-bench INFO: stride_e < min_stride_e, set stride_e = "
-            //               << min_stride_e << std::endl;
-            arg.stride_e[i] = min_stride_e;
-        }
+        //hipblaslt_cout << "hipblaslt-bench INFO: lda < min_lda, set lda = " << min_lda << std::endl;
+        arg.lda = min_lda;
+    }
+    if(arg.ldb < min_ldb)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: ldb < min_ldb, set ldb = " << min_ldb << std::endl;
+        arg.ldb = min_ldb;
+    }
+    if(arg.ldc < min_ldc)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: ldc < min_ldc, set ldc = " << min_ldc << std::endl;
+        arg.ldc = min_ldc;
+    }
+    if(arg.ldd < min_ldd)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: ldd < min_ldd, set ldd = " << min_ldc << std::endl;
+        arg.ldd = min_ldd;
+    }
+    if(arg.lde < min_lde)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: lde < min_lde, set lde = " << min_lde << std::endl;
+        arg.lde = min_lde;
+    }
+    int64_t min_stride_a = arg.lda * (arg.transA == 'N' ? arg.K : arg.M);
+    int64_t min_stride_b = arg.ldb * (arg.transB == 'N' ? arg.N : arg.K);
+    int64_t min_stride_c = arg.ldc * arg.N;
+    int64_t min_stride_d = arg.ldd * arg.N;
+    int64_t min_stride_e = arg.lde * arg.N;
+    if(!any_stride && arg.stride_a < min_stride_a)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: stride_a < min_stride_a, set stride_a = "
+        //               << min_stride_a << std::endl;
+        arg.stride_a = min_stride_a;
+    }
+    if(!any_stride && arg.stride_b < min_stride_b)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: stride_b < min_stride_b, set stride_b = "
+        //               << min_stride_b << std::endl;
+        arg.stride_b = min_stride_b;
+    }
+    if(!any_stride && arg.stride_c < min_stride_c)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: stride_c < min_stride_c, set stride_c = "
+        //               << min_stride_c << std::endl;
+        arg.stride_c = min_stride_c;
+    }
+    if(!any_stride && arg.stride_d < min_stride_d)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: stride_d < min_stride_d, set stride_d = "
+        //               << min_stride_d << std::endl;
+        arg.stride_d = min_stride_d;
+    }
+    if(!any_stride && arg.stride_e < min_stride_e)
+    {
+        //hipblaslt_cout << "hipblaslt-bench INFO: stride_e < min_stride_e, set stride_e = "
+        //               << min_stride_e << std::endl;
+        arg.stride_e = min_stride_e;
     }
 
     hipblaslt_matmul_dispatch<perf_matmul>(arg);
@@ -259,47 +255,41 @@ try
     bool        log_function_name = false;
     bool        any_stride        = false;
 
-    int api_method = 0;
-
-    bool                 grouped_gemm;
-    std::vector<int64_t> m, n, k;
-    std::vector<int64_t> lda, ldb, ldc, ldd, lde;
-    std::vector<int64_t> stride_a, stride_b, stride_c, stride_d, stride_e;
     arg.init(); // set all defaults
 
     options_description desc("hipblaslt-bench command line options");
     desc.add_options()
         // clang-format off
         ("sizem,m",
-         valueVec<int64_t>(&m)->default_value(128),
+         value<int64_t>(&arg.M)->default_value(128),
          "Specific matrix size: the number of rows or columns in matrix.")
 
         ("sizen,n",
-         valueVec<int64_t>(&n)->default_value(128),
+         value<int64_t>(&arg.N)->default_value(128),
          "Specific matrix the number of rows or columns in matrix")
 
         ("sizek,k",
-         valueVec<int64_t>(&k)->default_value(128),
+         value<int64_t>(&arg.K)->default_value(128),
          "Specific matrix size: the number of columns in A and rows in B.")
 
         ("lda",
-         valueVec<int64_t>(&lda),
+         value<int64_t>(&arg.lda),
          "Leading dimension of matrix A.")
 
         ("ldb",
-         valueVec<int64_t>(&ldb),
+         value<int64_t>(&arg.ldb),
          "Leading dimension of matrix B.")
 
         ("ldc",
-         valueVec<int64_t>(&ldc),
+         value<int64_t>(&arg.ldc),
          "Leading dimension of matrix C.")
 
         ("ldd",
-         valueVec<int64_t>(&ldd),
+         value<int64_t>(&arg.ldd),
          "Leading dimension of matrix D.")
 
         ("lde",
-         valueVec<int64_t>(&lde),
+         value<int64_t>(&arg.lde),
          "Leading dimension of matrix E.")
 
         ("any_stride",
@@ -307,23 +297,23 @@ try
          "Do not modify input strides based on leading dimensions")
 
         ("stride_a",
-         valueVec<int64_t>(&stride_a),
+         value<int64_t>(&arg.stride_a),
          "Specific stride of strided_batched matrix A, second dimension * leading dimension.")
 
         ("stride_b",
-         valueVec<int64_t>(&stride_b),
+         value<int64_t>(&arg.stride_b),
          "Specific stride of strided_batched matrix B, second dimension * leading dimension.")
 
         ("stride_c",
-         valueVec<int64_t>(&stride_c),
+         value<int64_t>(&arg.stride_c),
          "Specific stride of strided_batched matrix C, second dimension * leading dimension.")
 
         ("stride_d",
-         valueVec<int64_t>(&stride_d),
+         value<int64_t>(&arg.stride_d),
          "Specific stride of strided_batched matrix D, second dimension * leading dimension.")
 
         ("stride_e",
-         valueVec<int64_t>(&stride_e),
+         value<int64_t>(&arg.stride_e),
          "Specific stride of strided_batched matrix E, second dimension * leading dimension.")
 
         ("alpha",
@@ -338,8 +328,9 @@ try
 
         ("precision,r",
          value<std::string>(&precision)->default_value("f16_r"), "Precision of matrix A,B,C,D  "
-         "Options: f32_r,f16_r,bf16_r,f64_r,i32_r,i8_r")
+         "Options: f32_r,f16_r,bf16_r")
 
+/*TODO: Enable individual matrix type option once input/output can support different data type.
         ("a_type",
          value<std::string>(&a_type), "Precision of matrix A. "
         "Options: f32_r,f16_r,bf16_r")
@@ -355,17 +346,17 @@ try
         ("d_type",
          value<std::string>(&d_type), "Precision of matrix D. "
         "Options: f32_r,f16_r,bf16_r")
-
+*/
         ("compute_type",
          value<std::string>(&compute_type)->default_value("f32_r"), "Precision of computation. "
-         "Options: s,f32_r,x,xf32_r,f64_r,i32_r")
+         "Options: s,f32_r,x,xf32_r")
 
         ("scale_type",
          value<std::string>(&scale_type), "Precision of scalar. "
         "Options: f16_r,bf16_r")
 
         ("initialization",
-         value<std::string>(&initialization)->default_value("rand_int"),
+         value<std::string>(&initialization)->default_value("hpl"),
          "Intialize matrix data."
          "Options: rand_int, trig_float, hpl(floating)")
 
@@ -429,9 +420,9 @@ try
          bool_switch(&arg.bias_vector)->default_value(false),
          "Apply bias vector")
 
-        ("scaleAlpha_vector",
-         bool_switch(&arg.scaleAlpha_vector)->default_value(false),
-         "Apply scaleAlpha vector")
+        ("scaleD_vector",
+         bool_switch(&arg.scaleD_vector)->default_value(false),
+         "Apply scaleD vector")
 
         ("use_e",
          bool_switch(&arg.use_e)->default_value(false),
@@ -442,7 +433,7 @@ try
          "Enable gradient")
 
         ("grouped_gemm",
-         value<bool>(&grouped_gemm)->default_value(false),
+         value<int32_t>(&arg.grouped_gemm)->default_value(0),
          "Use grouped_gemm if non-zero. Number of gemms to run")
 
         ("device",
@@ -464,11 +455,6 @@ try
         ("function_filter",
          value<std::string>(&filter),
          "Simple strstr filter on function name only without wildcards")
-
-        ("api_method",
-         value<int>(&api_method)->default_value(0),
-         "Use extension API. 0: C style API. 1: declaration with C hipblasLtMatmul Layout/Desc but set, initialize, and run the problem with C++ extension API. 2: Using C++ extension API only. "
-         "Options: 0, 1, 2. (default: 0)")
 
         ("help,h", "produces this help message")
 
@@ -498,66 +484,6 @@ try
     // transfer local variable state
     ArgumentModel_set_log_function_name(log_function_name);
 
-    // Fill in the sizes to arguments
-    size_t length = 1;
-    if(grouped_gemm)
-    {
-        length           = std::max(m.size(), n.size());
-        length           = std::max(length, k.size());
-        length           = std::max(length, lda.size());
-        length           = std::max(length, ldb.size());
-        length           = std::max(length, ldc.size());
-        length           = std::max(length, ldd.size());
-        length           = std::max(length, lde.size());
-        length           = std::max(length, stride_a.size());
-        length           = std::max(length, stride_b.size());
-        length           = std::max(length, stride_c.size());
-        length           = std::max(length, stride_d.size());
-        length           = std::max(length, stride_e.size());
-        length           = std::min(length, MAX_SUPPORTED_NUM_PROBLEMS);
-        arg.grouped_gemm = length;
-    }
-    else
-    {
-        arg.grouped_gemm = 0;
-    }
-    for(size_t i = 0; i < length; i++)
-    {
-        if(m.size() > 0)
-            arg.M[i] = m.size() >= length ? m[i] : m[m.size() - 1];
-        if(n.size() > 0)
-            arg.N[i] = n.size() >= length ? n[i] : n[n.size() - 1];
-        if(k.size() > 0)
-            arg.K[i] = k.size() >= length ? k[i] : k[k.size() - 1];
-
-        if(lda.size() > 0)
-            arg.lda[i] = lda.size() >= length ? lda[i] : lda[lda.size() - 1];
-        if(ldb.size() > 0)
-            arg.ldb[i] = ldb.size() >= length ? ldb[i] : ldb[ldb.size() - 1];
-        if(ldc.size() > 0)
-            arg.ldc[i] = ldc.size() >= length ? ldc[i] : ldc[ldc.size() - 1];
-        if(ldd.size() > 0)
-            arg.ldd[i] = ldd.size() >= length ? ldd[i] : ldd[ldd.size() - 1];
-        if(lde.size() > 0)
-            arg.lde[i] = lde.size() >= length ? lde[i] : lde[lde.size() - 1];
-
-        if(stride_a.size() > 0)
-            arg.stride_a[i]
-                = stride_a.size() >= length ? stride_a[i] : stride_a[stride_a.size() - 1];
-        if(stride_b.size() > 0)
-            arg.stride_b[i]
-                = stride_b.size() >= length ? stride_b[i] : stride_b[stride_b.size() - 1];
-        if(stride_c.size() > 0)
-            arg.stride_c[i]
-                = stride_c.size() >= length ? stride_c[i] : stride_c[stride_c.size() - 1];
-        if(stride_d.size() > 0)
-            arg.stride_d[i]
-                = stride_d.size() >= length ? stride_d[i] : stride_d[stride_d.size() - 1];
-        if(stride_e.size() > 0)
-            arg.stride_e[i]
-                = stride_e.size() >= length ? stride_e[i] : stride_e[stride_e.size() - 1];
-    }
-
     // Device Query
     int64_t device_count = query_device_property();
 
@@ -574,38 +500,38 @@ try
     // validate arguments
 
     std::transform(precision.begin(), precision.end(), precision.begin(), ::tolower);
-    auto prec = string_to_hipblaslt_datatype(precision);
-    if(prec == static_cast<hipblasltDatatype_t>(0))
+    auto prec = string_to_hipblas_datatype(precision);
+    if(prec == static_cast<hipblasDatatype_t>(0))
         throw std::invalid_argument("Invalid value for --precision " + precision);
 
-    arg.a_type = a_type == "" ? prec : string_to_hipblaslt_datatype(a_type);
-    if(arg.a_type == static_cast<hipblasltDatatype_t>(0))
+    arg.a_type = a_type == "" ? prec : string_to_hipblas_datatype(a_type);
+    if(arg.a_type == static_cast<hipblasDatatype_t>(0))
         throw std::invalid_argument("Invalid value for --a_type " + a_type);
 
-    arg.b_type = b_type == "" ? prec : string_to_hipblaslt_datatype(b_type);
-    if(arg.b_type == static_cast<hipblasltDatatype_t>(0))
+    arg.b_type = b_type == "" ? prec : string_to_hipblas_datatype(b_type);
+    if(arg.b_type == static_cast<hipblasDatatype_t>(0))
         throw std::invalid_argument("Invalid value for --b_type " + b_type);
 
-    arg.c_type = c_type == "" ? prec : string_to_hipblaslt_datatype(c_type);
-    if(arg.c_type == static_cast<hipblasltDatatype_t>(0))
+    arg.c_type = c_type == "" ? prec : string_to_hipblas_datatype(c_type);
+    if(arg.c_type == static_cast<hipblasDatatype_t>(0))
         throw std::invalid_argument("Invalid value for --c_type " + c_type);
 
-    arg.d_type = d_type == "" ? prec : string_to_hipblaslt_datatype(d_type);
-    if(arg.d_type == static_cast<hipblasltDatatype_t>(0))
+    arg.d_type = d_type == "" ? prec : string_to_hipblas_datatype(d_type);
+    if(arg.d_type == static_cast<hipblasDatatype_t>(0))
         throw std::invalid_argument("Invalid value for --d_type " + d_type);
 
-    bool is_f16      = arg.a_type == HIPBLASLT_R_16F || arg.a_type == HIPBLASLT_R_16B;
-    bool is_f32      = arg.a_type == HIPBLASLT_R_32F;
+    bool is_f16      = arg.a_type == HIPBLAS_R_16F || arg.a_type == HIPBLAS_R_16B;
+    bool is_f32      = arg.a_type == HIPBLAS_R_32F;
     arg.compute_type = compute_type == "" ? (HIPBLASLT_COMPUTE_F32)
                                           : string_to_hipblaslt_computetype(compute_type);
     if(arg.compute_type == static_cast<hipblasLtComputeType_t>(0))
         throw std::invalid_argument("Invalid value for --compute_type " + compute_type);
 
-    if(string_to_hipblaslt_datatype(bias_type) == static_cast<hipblasltDatatype_t>(0)
-       && bias_type != "" && bias_type != "default")
+    if(string_to_hipblas_datatype(bias_type) == static_cast<hipblasDatatype_t>(0) && bias_type != ""
+       && bias_type != "default")
         throw std::invalid_argument("Invalid value for --bias_type " + bias_type);
     else
-        arg.bias_type = string_to_hipblaslt_datatype(bias_type);
+        arg.bias_type = string_to_hipblas_datatype(bias_type);
 
     arg.initialization = string2hipblaslt_initialization(initialization);
     if(arg.initialization == static_cast<hipblaslt_initialization>(0))
@@ -617,35 +543,16 @@ try
 
     arg.bias_source = string_to_hipblaslt_bias_source(bias_source);
 
-    if(arg.M[0] < 0)
-        throw std::invalid_argument("Invalid value for -m " + std::to_string(arg.M[0]));
-    if(arg.N[0] < 0)
-        throw std::invalid_argument("Invalid value for -n " + std::to_string(arg.N[0]));
-    if(arg.K[0] < 0)
-        throw std::invalid_argument("Invalid value for -k " + std::to_string(arg.K[0]));
+    if(arg.M < 0)
+        throw std::invalid_argument("Invalid value for -m " + std::to_string(arg.M));
+    if(arg.N < 0)
+        throw std::invalid_argument("Invalid value for -n " + std::to_string(arg.N));
+    if(arg.K < 0)
+        throw std::invalid_argument("Invalid value for -k " + std::to_string(arg.K));
 
     int copied = snprintf(arg.function, sizeof(arg.function), "%s", function.c_str());
     if(copied <= 0 || copied >= sizeof(arg.function))
         throw std::invalid_argument("Invalid value for --function");
-
-    switch(api_method)
-    {
-    case 0:
-        arg.use_ext            = false;
-        arg.use_ext_setproblem = false;
-        break;
-    case 1:
-        arg.use_ext            = true;
-        arg.use_ext_setproblem = false;
-        break;
-    case 2:
-        arg.use_ext            = true;
-        arg.use_ext_setproblem = true;
-        break;
-    default:
-        throw std::invalid_argument("Invalid value for api_method: " + std::to_string(api_method));
-        break;
-    }
 
     arg.norm_check_assert = false;
     return run_bench_test(arg, filter, any_stride);

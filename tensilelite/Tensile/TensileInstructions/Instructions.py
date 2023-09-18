@@ -203,11 +203,6 @@ class VCmpXInstruction(CommonInstruction):
             l.append(self.comment)
         else:
             instStr = self.instStr.replace("_cmpx_", "_cmp_")
-            if isinstance(self.dst, EXEC):
-                if self.kernel.wavefrontSize == 64:
-                    self.dst = "vcc"
-                else:
-                    self.dst = "vcc_lo"
             l1 = [instStr, self.dst]
             if self.srcs:
                 l1.extend(self.srcs)
@@ -222,8 +217,9 @@ class VCmpXInstruction(CommonInstruction):
 
     def getArgStr(self) -> str:
         kStr = ""
-        if self.dst:
-            kStr += str(self.dst)
+        if self.archCaps["CMPXWritesSGPR"]:
+            if self.dst:
+                kStr += str(self.dst)
         if self.dst1:
             if kStr:
                 kStr += ", "
@@ -238,18 +234,13 @@ class VCmpXInstruction(CommonInstruction):
 
     def __str__(self) -> str:
         self.preStr()
-        if self.archCaps["CMPXWritesSGPR"]:
+        if self.archCaps["CMPXWritesSGPR"] or isinstance(self.dst, EXEC):
             kStr = self.instStr + " " + self.getArgStr()
             kStr += str(self.sdwa) if self.sdwa else ""
             kStr += str(self.vop3) if self.vop3 else ""
             kStr = self.formatWithComment(kStr)
         else:
             kStr = self.instStr.replace("_cmpx_", "_cmp_")
-            if isinstance(self.dst, EXEC):
-                if self.kernel.wavefrontSize == 64:
-                    self.dst = "vcc"
-                else:
-                    self.dst = "vcc_lo"
             kStr += " " + self.getArgStr()
             kStr += str(self.sdwa) if self.sdwa else ""
             kStr = self.formatWithComment(kStr)
@@ -264,15 +255,12 @@ class VCmpXInstruction(CommonInstruction):
 class VCvtInstruction(CommonInstruction):
     def __init__(self, cvtType: CvtType, dst, src, sdwa: Optional[SDWAModifiers] = None, \
                  comment="") -> None:
-        if isinstance(src, list):
-            super().__init__(InstType.INST_CVT, dst, src, sdwa, None, comment)
-        else:
-            super().__init__(InstType.INST_CVT, dst, [src], sdwa, None, comment)
+        super().__init__(InstType.INST_CVT, dst, [src], sdwa, None, comment)
         self.cvtType = cvtType
 
 class MFMAInstruction(Instruction):
     def __init__(self, instType: InstType, accType: InstType, variant: List[int], mfma1k, \
-                 acc, a, b, acc2=None, neg=False, comment="") -> None:
+                 acc, a, b, acc2=None, comment="") -> None:
         super().__init__(instType, comment)
         self.accType = accType
         self.variant = variant
@@ -281,63 +269,47 @@ class MFMAInstruction(Instruction):
         self.a       = a
         self.b       = b
         self.acc2    = acc if acc2 == None else acc2
-        self.neg     = neg
 
     def typeConvert(self, iType) -> str:
         if iType == InstType.INST_F16:
             kStr = "f16"
         elif iType == InstType.INST_F32:
             kStr = "f32"
-        elif iType == InstType.INST_F64:
-            kStr = "f64"
         elif iType == InstType.INST_BF16:
             kStr = "bf16"
         elif iType == InstType.INST_I8:
             kStr = "i8"
-        elif iType == InstType.INST_U8:
-            kStr = "iu8"
         elif iType == InstType.INST_I32:
             kStr = "i32"
         elif iType == InstType.INST_XF32:
             kStr = "xf32"
-        elif iType == InstType.INST_F8:
-            kStr = "fp8_fp8"
-        elif iType == InstType.INST_BF8:
-            kStr = "bf8_bf8"
-        elif iType == InstType.INST_F8_BF8:
-            kStr = "fp8_bf8"
-        elif iType == InstType.INST_BF8_F8:
-            kStr = "bf8_fp8"
         else:
             printExit("Type %s not found"%str(iType))
         return kStr
 
     def getParams(self) -> list:
-        negStr = " neg_lo:[1,1,1]" if self.neg else ""
-        return [self.acc, self.a, self.b, self.acc2, negStr]
+        return [self.acc, self.a, self.b, self.acc2]
 
     def preStr(self) -> None:
-        variantStr = "{}x{}x{}".format(*self.variant)
-        if self.asmCaps["HasMFMA_explictB"] and not self.mfma1k:
+        if len(self.variant) == 3:
+            variantStr = "{}x{}x{}".format(*self.variant)
+            mfma_1k = "_1k" if self.mfma1k else ""
+            self.setInst("v_mfma_%s_%s%s%s"%(self.typeConvert(self.accType), variantStr, \
+                self.typeConvert(self.instType), mfma_1k))
+        elif len(self.variant) == 4:
+            variantStr = "{}x{}x{}".format(*self.variant)
             strB = "%ub_" % self.variant[3] if self.variant[3] > 1 else ""
             self.setInst("v_mfma_%s_%s_%s%s"%(self.typeConvert(self.accType), variantStr, \
                 strB, self.typeConvert(self.instType)))
         else:
-            is_mfma          = self.asmCaps["HasMFMA"]
-            instructionName  = "mfma" if is_mfma else "wmma"
-            instructionStep  = ""     if is_mfma else "_"
-            mfma_1k = "_1k" if self.mfma1k else ""
-            self.setInst("v_%s_%s_%s%s%s%s"%(instructionName, self.typeConvert(self.accType), variantStr, \
-                         instructionStep, self.typeConvert(self.instType), mfma_1k))
+            assert("Currently does not support mfma variant %u"%len(self.variant) and 0)
 
     def getArgStr(self) -> str:
-        negStr = " neg_lo:[1,1,1]" if self.neg else ""
-        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2) + negStr
+        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2)
 
     def toList(self) -> list:
         self.preStr()
-        negStr = " neg_lo:[1,1,1]" if self.neg else ""
-        return [self.instStr, self.acc, self.a, self.b, self.acc2, negStr, self.comment]
+        return [self.instStr, self.acc, self.a, self.b, self.acc2, self.comment]
 
     def __str__(self) -> str:
         self.preStr()
@@ -367,14 +339,6 @@ class SMFMAInstruction(Instruction):
             kStr = "i8"
         elif iType == InstType.INST_I32:
             kStr = "i32"
-        elif iType == InstType.INST_F8:
-            kStr = "fp8_fp8"
-        elif iType == InstType.INST_BF8:
-            kStr = "bf8_bf8"
-        elif iType == InstType.INST_F8_BF8:
-            kStr = "fp8_bf8"
-        elif iType == InstType.INST_BF8_F8:
-            kStr = "bf8_fp8"
         else:
             printExit("Type %s not found"%str(iType))
         return kStr
@@ -581,34 +545,6 @@ class GlobalWriteInstruction(ReadWriteInstruction):
         super().__init__(instType, ReadWriteInstruction.RWType.RW_TYPE0, comment)
         self.srcData = srcData
 
-class SMemStoreInstruction(GlobalWriteInstruction):
-    def __init__(self, instType: InstType, srcData, base, soffset,
-                 smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(instType, srcData, comment)
-        self.instStr = "s_store_"
-        self.base    = base
-        self.soffset = soffset
-        self.smem    = smem
-
-    def getParams(self) -> list:
-        return [self.srcData, self.base, self.soffset]
-
-    def getArgStr(self) -> str:
-        return str(self.srcData) + ", " + str(self.base) + ", " + str(self.soffset)
-
-    def toList(self) -> list:
-        self.preStr()
-        l = [self.instStr, self.srcData, self.base, self.soffset]
-        l.extend(self.smem.toList()) if self.smem else ""
-        l.append(self.comment)
-        return l
-
-    def __str__(self) -> str:
-        self.preStr()
-        kStr = self.instStr + " " + self.getArgStr()
-        kStr += str(self.smem) if self.smem else ""
-        return self.formatWithComment(kStr)
-
 class FLATStoreInstruction(GlobalWriteInstruction):
     def __init__(self, instType: InstType, vaddr, srcData, \
                  flat: Optional[FLATModifiers] = None, \
@@ -669,17 +605,19 @@ class MUBUFStoreInstruction(GlobalWriteInstruction):
 
 class LocalReadInstruction(ReadWriteInstruction):
     def __init__(self, instType: InstType, dst, src, \
-                 comment="") -> None:
+                 readToTempVgpr: bool, comment="") -> None:
         super().__init__(instType, ReadWriteInstruction.RWType.RW_TYPE1, comment)
         self.dst            = dst
         self.srcs            = src
 
+        self.readToTempVgpr = readToTempVgpr
+
 class DSLoadInstruction(LocalReadInstruction):
     def __init__(self, instType: InstType, dst, src, \
-                 \
+                 readToTempVgpr: bool, \
                  ds: Optional[DSModifiers] = None, \
                  comment="") -> None:
-        super().__init__(instType, dst, src, comment)
+        super().__init__(instType, dst, src, readToTempVgpr, comment)
         self.ds             = ds
 
     def getParams(self) -> list:
@@ -789,13 +727,6 @@ class BufferLoadB128(MUBUFReadInstruction):
         super().__init__(InstType.INST_B128, dst, vaddr, saddr, soffset, mubuf, comment)
 
 ## Flat load
-class FlatLoadD16HIU8(FLATReadInstruction):
-    def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_D16_HI_U8, dst, vaddr, flat, comment)
-
-class FlatLoadD16U8(FLATReadInstruction):
-    def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_D16_U8, dst, vaddr, flat, comment)
 class FlatLoadD16HIB16(FLATReadInstruction):
     def __init__(self, dst, vaddr, flat: Optional[FLATModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_D16_HI_B16, dst, vaddr, flat, comment)
@@ -864,7 +795,7 @@ class BufferAtomicAddF32(MUBUFStoreInstruction):
 class BufferAtomicCmpswapB32(MUBUFStoreInstruction):
     def __init__(self, src, vaddr, saddr, soffset, mubuf: Optional[MUBUFModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B32, src, vaddr, saddr, soffset, mubuf, comment)
-        self.setInst("buffer_atomic_cmpswap_b32")
+        self.setInst("buffer_atomic_cmpswap")
 
     def typeConvert(self) -> str:
         return ""
@@ -872,7 +803,7 @@ class BufferAtomicCmpswapB32(MUBUFStoreInstruction):
 class BufferAtomicCmpswapB64(MUBUFStoreInstruction):
     def __init__(self, src, vaddr, saddr, soffset, mubuf: Optional[MUBUFModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B32, src, vaddr, saddr, soffset, mubuf, comment)
-        self.setInst("buffer_atomic_cmpswap_b64")
+        self.setInst("buffer_atomic_cmpswap_x2")
 
     def typeConvert(self) -> str:
         return ""
@@ -902,7 +833,7 @@ class FlatAtomicCmpswapB32(FLATStoreInstruction):
     def __init__(self, vaddr, tmp, src, flat: Optional[FLATModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_B32, vaddr, src, flat, comment)
         self.tmp = tmp
-        self.setInst("flat_atomic_cmpswap_b32")
+        self.setInst("flat_atomic_cmpswap")
 
     def getArgStr(self) -> str:
         return ", ".join(map(str, [self.vaddr, self.tmp, self.srcData]))
@@ -925,50 +856,50 @@ class FlatAtomicCmpswapB32(FLATStoreInstruction):
 
 # DS Load
 class DSLoadU8(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_U8, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_U8, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_u8")
 
 class DSLoadD16HIU8(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_D16_HI_U8, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_D16_HI_U8, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_u8_d16_hi")
 
 class DSLoadU16(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_U16, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_U16, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_u16")
 
 class DSLoadD16HIU16(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_D16_HI_U16, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_D16_HI_U16, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_u16_d16_hi")
 
 class DSLoadB16(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B16, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B16, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_b16")
 
 class DSLoadB32(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B32, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_b32")
 
 class DSLoadB64(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B64, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B64, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_b64")
 
 class DSLoadB128(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B128, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B128, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 1
         self.setInst("ds_load_b128")
 
@@ -977,14 +908,14 @@ class DSLoadB128(DSLoadInstruction):
         return 2
 
 class DSLoad2B32(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B32, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 2
         self.setInst("ds_load2_b32")
 
 class DSLoad2B64(DSLoadInstruction):
-    def __init__(self, dst, src, ds: Optional[DSModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_B64, dst, src, ds, comment)
+    def __init__(self, dst, src, readToTempVgpr: bool, ds: Optional[DSModifiers] = None, comment="") -> None:
+        super().__init__(InstType.INST_B64, dst, src, readToTempVgpr, ds, comment)
         if ds: ds.na = 2
         self.setInst("ds_load2_b64")
 
@@ -1449,21 +1380,6 @@ class SBarrier(Instruction):
 
     def __str__(self) -> str:
         return self.formatWithComment(self.instStr)
-
-class SDcacheWb(Instruction):
-    def __init__(self, comment="") -> None:
-        super().__init__(InstType.INST_NOTYPE, comment)
-        self.setInst("s_dcache_wb")
-
-    def getParams(self) -> list:
-        return []
-
-    def toList(self) -> list:
-        return [self.instStr, self.comment]
-
-    def __str__(self) -> str:
-        return self.formatWithComment(self.instStr)
-
 class SNop(Instruction):
     def __init__(self, waitState: int, comment="") -> None:
         super().__init__(InstType.INST_NOTYPE, comment)
@@ -1507,22 +1423,6 @@ class SSleep(Instruction):
     def __str__(self) -> str:
         return self.formatWithComment(f"{self.instStr} {self.simm16}")
 
-# S Reg
-class SGetRegB32(CommonInstruction):
-    def __init__(self, dst, src, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, [src], None, None, comment)
-        self.setInst("s_getreg_b32")
-
-class SSetRegB32(CommonInstruction):
-    def __init__(self, dst, src, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, [src], None, None, comment)
-        self.setInst("s_setreg_b32")
-
-class SSetRegIMM32B32(CommonInstruction):
-    def __init__(self, dst, src, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, [src], None, None, comment)
-        self.setInst("s_setreg_IMM32_b32")
-
 # S WaitCnt
 class _SWaitCnt(Instruction):
     def __init__(self, lgkmcnt: int=-1, vmcnt: int=-1, comment=""):
@@ -1538,10 +1438,6 @@ class _SWaitCnt(Instruction):
         return []
 
     def __str__(self) -> str:
-        if self.lgkmcnt == "null":
-            waitStr = ""
-            waitStr = "_lgkmcnt null, 0"
-            return self.formatWithComment("s_waitcnt%s"%(waitStr))
         if self.lgkmcnt == 0 and self.vmcnt == 0:
             waitStr = "0"
         else:
@@ -1566,7 +1462,7 @@ class _SWaitCntVscnt(Instruction):
         return []
 
     def __str__(self) -> str:
-        return self.formatWithComment("s_waitcnt_vscnt null %u"%(self.vscnt))
+        return self.formatWithComment("s_waitcnt_vscnt %u"%(self.vscnt))
 
 class SWaitCnt(CompositeInstruction):
     """
@@ -1603,9 +1499,8 @@ class SWaitCnt(CompositeInstruction):
         maxVmcnt = self.asmCaps["MaxVmcnt"]
         if self.archCaps["SeparateVscnt"]:
             vmcnt = min(vmcnt, maxVmcnt)
-            self.instructions = [_SWaitCnt(lgkmcnt, vmcnt, comment)]
-            if (lgkmcnt != -1 and vmcnt != -1) or vscnt != -1 :
-                self.instructions.append(_SWaitCntVscnt(vmcnt, comment))
+            self.instructions = [_SWaitCnt(lgkmcnt, vmcnt, comment),
+                                 _SWaitCntVscnt(vscnt, comment)]
         else:
             vmvscnt = -1
             if vscnt != -1:
@@ -1635,27 +1530,6 @@ class SLoadB256(SMemLoadInstruction):
 class SLoadB512(SMemLoadInstruction):
     def __init__(self, dst, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
         super().__init__(InstType.INST_B512, dst, base, soffset, smem, comment)
-
-# S Store
-class SStoreB32(SMemStoreInstruction):
-    def __init__(self, src, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(InstType.INST_B32, src, base, soffset, smem, comment)
-
-class SStoreB64(SMemStoreInstruction):
-    def __init__(self, src, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(InstType.INST_B64, src, base, soffset, smem, comment)
-
-class SStoreB128(SMemStoreInstruction):
-    def __init__(self, src, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(InstType.INST_B128, src, base, soffset, smem, comment)
-
-class SStoreB256(SMemStoreInstruction):
-    def __init__(self, src, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(InstType.INST_B256, src, base, soffset, smem, comment)
-
-class SStoreB512(SMemStoreInstruction):
-    def __init__(self, src, base, soffset, smem: Optional[SMEMModifiers]=None, comment="") -> None:
-        super().__init__(InstType.INST_B512, src, base, soffset, smem, comment)
 
 ################################################################################
 ###   VGPR instructions
@@ -1968,11 +1842,6 @@ class VRcpF32(CommonInstruction):
         super().__init__(InstType.INST_F32, dst, [src], None, None, comment)
         self.setInst("v_rcp_f32")
 
-class VRcpIFlagF32(CommonInstruction):
-    def __init__(self, dst, src, comment="") -> None:
-        super().__init__(InstType.INST_F32, dst, [src], None, None, comment)
-        self.setInst("v_rcp_iflag_f32")
-
 # Cmp
 class VCmpEQF32(VCmpInstruction):
     def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
@@ -1988,11 +1857,6 @@ class VCmpEQU32(VCmpInstruction):
     def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_U32, dst, src0, src1, sdwa, comment)
         self.setInst("v_cmp_eq_u32")
-
-class VCmpEQI32(VCmpInstruction):
-    def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_I32, dst, src0, src1, sdwa, comment)
-        self.setInst("v_cmp_eq_i32")
 
 class VCmpGEF16(VCmpInstruction):
     def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
@@ -2085,15 +1949,10 @@ class VCmpNeU64(VCmpInstruction):
         super().__init__(InstType.INST_U64, dst, src0, src1, sdwa, comment)
         self.setInst("v_cmp_ne_u64")
 
-class VCmpClassF32(VCmpXInstruction):
-    def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_F32, dst, src0, src1, sdwa, comment)
-        self.setInst("v_cmp_class_f32")
-
 # CmpX
 class VCmpXClassF32(VCmpXInstruction):
     def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(InstType.INST_F32, dst, src0, src1, sdwa, comment)
+        super().__init__(InstType.INST_U32, dst, src0, src1, sdwa, comment)
         self.setInst("v_cmpx_class_f32")
 
 class VCmpXEqU32(VCmpXInstruction):
@@ -2177,11 +2036,6 @@ class VMed3I32(CommonInstruction):
         super().__init__(InstType.INST_I32, dst, [src0, src1, src2], None, None, comment)
         self.setInst("v_med3_i32")
 
-class VMed3F32(CommonInstruction):
-    def __init__(self, dst, src0, src1, src2, comment="") -> None:
-        super().__init__(InstType.INST_F32, dst, [src0, src1, src2], None, None, comment)
-        self.setInst("v_med3_f32")
-
 class VMinF16(CommonInstruction):
     def __init__(self, dst, src0, src1, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
         super().__init__(InstType.INST_F16, dst, [src0, src1], sdwa, None, comment)
@@ -2258,31 +2112,6 @@ class VCvtF32toI32(VCvtInstruction):
     def __init__(self, dst, src, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
         super().__init__(CvtType.CVT_F32_to_I32, dst, src, sdwa, comment)
         self.setInst("v_cvt_i32_f32")
-
-class VCvtFP8toF32(VCvtInstruction):
-    def __init__(self, dst, src, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(CvtType.CVT_FP8_to_F32, dst, src, sdwa, comment)
-        self.setInst("v_cvt_f32_fp8")
-
-class VCvtBF8toF32(VCvtInstruction):
-    def __init__(self, dst, src, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(CvtType.CVT_BF8_to_F32, dst, src, sdwa, comment)
-        self.setInst("v_cvt_f32_bf8")
-
-class VCvtPkFP8toF32(VCvtInstruction):
-    def __init__(self, dst, src, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(CvtType.CVT_PK_FP8_to_F32, dst, src, sdwa, comment)
-        self.setInst("v_cvt_pk_f32_fp8")
-
-class VCvtPkBF8toF32(VCvtInstruction):
-    def __init__(self, dst, src, sdwa: Optional[SDWAModifiers] = None, comment="") -> None:
-        super().__init__(CvtType.CVT_PK_BF8_to_F32, dst, src, sdwa, comment)
-        self.setInst("v_cvt_pk_f32_bf8")
-
-class VCvtPkF32toFP8(VCvtInstruction):
-    def __init__(self, dst, src0, src1, vop3: Optional[VOP3PModifiers] = None, comment="") -> None:
-        super().__init__(CvtType.CVT_PK_F32_to_FP8, dst, [src0, src1], vop3, comment)
-        self.setInst("v_cvt_pk_fp8_f32")
 
 # V Mask
 class VCndMaskB32(CommonInstruction):
@@ -2464,8 +2293,3 @@ class VRndneF32(CommonInstruction):
     def __init__(self, dst, src, comment="") -> None:
         super().__init__(InstType.INST_F32, dst, [src], None, None, comment)
         self.setInst("v_rndne_f32")
-
-class VPermB32(CommonInstruction):
-    def __init__(self, dst, src0, src1, src2, comment="") -> None:
-        super().__init__(InstType.INST_B32, dst, [src0, src1, src2], None, None, comment)
-        self.setInst("v_perm_b32")

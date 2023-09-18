@@ -42,42 +42,27 @@ namespace
     // In the general case of <Ti, To, Tc>, these tests do not apply, and if this
     // functor is called, an internal error message is generated. When converted
     // to bool, this functor returns false.
-    template <typename TiA,
-              typename TiB = TiA,
-              typename To  = TiB,
-              typename Tc  = To,
-              typename     = void>
+    template <typename Ti, typename To = Ti, typename Tc = To, typename = void>
     struct matmul_testing : hipblaslt_test_invalid
     {
     };
 
     // When Ti = To = Tc != void, this test applies.
     // When converted to bool, this functor returns true.
-    template <typename TiA, typename TiB, typename To, typename Tc>
+    template <typename Ti, typename To, typename Tc>
     struct matmul_testing<
-        TiA,
-        TiB,
+        Ti,
         To,
         Tc,
-        std::enable_if_t<
-            (std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblasLtHalf>{})
-            || (std::is_same<TiA, hip_bfloat16>{} && std::is_same<TiB, hip_bfloat16>{})
-            || (std::is_same<TiA, float>{} && std::is_same<TiB, float>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_f8>{})
-            || (std::is_same<TiA, hipblaslt_bf8>{} && std::is_same<TiB, hipblaslt_f8>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_bf8>{})
-            || (std::is_same<TiA, double>{} && std::is_same<TiB, double>{})
-            || (std::is_same<TiA, hipblasLtInt8>{} && std::is_same<TiB, hipblasLtInt8>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblasLtHalf>{})
-            || (std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblaslt_f8>{})>>
-        : hipblaslt_test_valid
+        std::enable_if_t<std::is_same<Ti, hipblasLtHalf>{} || std::is_same<Ti, hip_bfloat16>{}
+                         || std::is_same<Ti, float>{}>> : hipblaslt_test_valid
     {
         void operator()(const Arguments& arg)
         {
             if(!strcmp(arg.function, "matmul"))
-                testing_matmul<TiA, TiB, To, Tc>(arg);
+                testing_matmul<Ti, To, Tc>(arg);
             else if(!strcmp(arg.function, "matmul_bad_arg"))
-                testing_matmul_bad_arg<TiA, TiB, To, Tc>(arg);
+                testing_matmul_bad_arg<Ti, To, Tc>(arg);
             else
                 FAIL() << "Internal error: Test called with unknown function: " << arg.function;
         }
@@ -108,10 +93,10 @@ namespace
             }
             else
             {
-                name << hipblaslt_datatype_to_string(arg.a_type)
-                     << hipblaslt_datatype_to_string(arg.b_type)
-                     << hipblaslt_datatype_to_string(arg.c_type)
-                     << hipblaslt_datatype_to_string(arg.d_type)
+                name << hipblas_datatype_to_string(arg.a_type)
+                     << hipblas_datatype_to_string(arg.b_type)
+                     << hipblas_datatype_to_string(arg.c_type)
+                     << hipblas_datatype_to_string(arg.d_type)
                      << hipblaslt_computetype_to_string(arg.compute_type);
 
                 if(arg.activation_type != hipblaslt_activation_type::none)
@@ -123,7 +108,7 @@ namespace
                 {
                     name << "_BIAS" << hipblaslt_bias_source_to_string(arg.bias_source);
                     if(arg.d_type != arg.scale_type && arg.bias_type == arg.scale_type)
-                        name << hipblaslt_datatype_to_string(arg.bias_type);
+                        name << hipblas_datatype_to_string(arg.bias_type);
                 }
 
                 if(arg.gradient)
@@ -143,34 +128,19 @@ namespace
 
                 name << '_' << (char)std::toupper(arg.transA) << (char)std::toupper(arg.transB);
 
-                name << '_' << arg.M[0] << '_' << arg.N[0] << '_' << arg.K[0] << '_' << arg.alpha << '_'
-                     << arg.lda[0] << '_' << arg.ldb[0] << '_' << arg.beta << '_' << arg.ldc[0] << '_'
-                     << arg.ldd[0];
+                name << '_' << arg.M << '_' << arg.N << '_' << arg.K << '_' << arg.alpha << '_'
+                     << arg.lda << '_' << arg.ldb << '_' << arg.beta << '_' << arg.ldc << '_'
+                     << arg.ldd;
 
                 if(arg.use_e)
                 {
-                    name << '_' << arg.lde[0];
+                    name << '_' << arg.lde;
                 }
 
                 name << '_' << arg.batch_count;
 
-                if(arg.scaleA)
-                    name << "_SA";
-
-                if(arg.scaleB)
-                    name << "_SB";
-
-                if(arg.scaleC)
-                    name << "_SC";
-                
-                if(arg.scaleD)
-                    name << "_SD";
-
-                if (arg.scaleE)
-                    name << "_SAux";
-
-                if(arg.scaleAlpha_vector)
-                    name << "_SAV";
+                if(arg.scaleD_vector)
+                    name << "_SDV";
 
                 if(arg.grouped_gemm > 0)
                     name << "_GG" << arg.grouped_gemm;
@@ -180,12 +150,8 @@ namespace
                     name << "_APIExt";
                 if(arg.use_ext_setproblem)
                     name << "_APIExtSet";
-                if(arg.algo_method == 2)
-                    name << "_APIAlgoIndex";
-                else if(arg.algo_method == 1)
+                if(arg.use_findallalgo)
                     name << "_APIFindAllAlgo";
-                if(arg.use_user_args)
-                    name << "_UserArgs";
             }
 
             return std::move(name);

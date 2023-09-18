@@ -41,8 +41,6 @@ namespace Tensile
             return "Exp";
         case ActivationType::Gelu:
             return "Gelu";
-        case ActivationType::Geluscaling:
-            return "Geluscaling";
         case ActivationType::Leakyrelu:
             return "Leakyrelu";
         case ActivationType::Relu:
@@ -87,10 +85,6 @@ namespace Tensile
         {
             t = ActivationType::Gelu;
         }
-        else if(strValue == ToString(ActivationType::Geluscaling))
-        {
-            t = ActivationType::Geluscaling;
-        }
         else if(strValue == ToString(ActivationType::Leakyrelu))
         {
             t = ActivationType::Leakyrelu;
@@ -132,7 +126,7 @@ namespace Tensile
         argMap.insert(std::pair<ActivationType, int>(ActivationType::Clippedrelu, 2));
         argMap.insert(std::pair<ActivationType, int>(ActivationType::Leakyrelu, 1));
         argMap.insert(std::pair<ActivationType, int>(ActivationType::Tanh, 2));
-        argMap.insert(std::pair<ActivationType, int>(ActivationType::Geluscaling, 1));
+
         if(d == ActivationType::All)
         {
             int maxArgs = 0;

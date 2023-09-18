@@ -2,7 +2,7 @@
  *
  * MIT License
  *
- * Copyright (C) 2022-2023 Advanced Micro Devices, Inc.
+ * Copyright (C) 2022 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -93,15 +93,6 @@
         }                                                     \
     } while(0)
 
-#define CHECK_SOLUTION_FOUND(SOL_COUNT)     \
-    do                                      \
-    {                                       \
-        if(SOL_COUNT == 0)                  \
-        {                                   \
-            FAIL() << "NO solution found!"; \
-            return;                         \
-        }                                   \
-    } while(0)
 #else // GOOGLE_TEST
 
 inline void hipblaslt_expect_status(hipblasStatus_t status, hipblasStatus_t expect)
@@ -136,16 +127,6 @@ inline void hipblaslt_expect_status(hipblasStatus_t status, hipblasStatus_t expe
     if(!(ERROR))             \
         exit(EXIT_FAILURE);
 
-#define CHECK_SOLUTION_FOUND(SOL_COUNT)                                                \
-    do                                                                                 \
-    {                                                                                  \
-        if(SOL_COUNT == 0)                                                             \
-        {                                                                              \
-            hipblaslt_cerr << "error: NO solution found! at " __FILE__ ":" << __LINE__ \
-                           << std::endl;                                               \
-            exit(EXIT_FAILURE);                                                        \
-        }                                                                              \
-    } while(0)
 #endif // GOOGLE_TEST
 
 #define CHECK_HIPBLASLT_ERROR2(STATUS) EXPECT_HIPBLAS_STATUS(STATUS, HIPBLAS_STATUS_SUCCESS)
@@ -339,12 +320,10 @@ public:
         return std::move(name);
     }
 
-    RocBlasLt_TestName()                                     = default;
-    RocBlasLt_TestName(const RocBlasLt_TestName&)            = delete;
+    RocBlasLt_TestName()                          = default;
+    RocBlasLt_TestName(const RocBlasLt_TestName&) = delete;
     RocBlasLt_TestName& operator=(const RocBlasLt_TestName&) = delete;
 };
-
-bool hipblaslt_client_global_filters(const Arguments& args);
 
 // ----------------------------------------------------------------------------
 // RocBlasLt_Test base class. All non-legacy hipBLASLt Google tests derive from it.
@@ -360,12 +339,8 @@ protected:
     template <typename... T>
     struct type_filter_functor
     {
-        bool operator()(const Arguments& args)
+        bool operator()(const Arguments&)
         {
-            // additional global filters applied first
-            if(!hipblaslt_client_global_filters(args))
-                return false;
-
             return static_cast<bool>(FILTER<T...>{});
         }
     };
@@ -429,10 +404,10 @@ struct hipblaslt_test_invalid
 #else
         hipblaslt_cerr << msg << std::endl;
         hipblaslt_cerr << "function: " << arg.function << " types: "
-                       << " a: " << hipblaslt_datatype_to_string(arg.a_type)
-                       << " b: " << hipblaslt_datatype_to_string(arg.b_type)
-                       << " c: " << hipblaslt_datatype_to_string(arg.c_type)
-                       << " d: " << hipblaslt_datatype_to_string(arg.d_type)
+                       << " a: " << hipblas_datatype_to_string(arg.a_type)
+                       << " b: " << hipblas_datatype_to_string(arg.b_type)
+                       << " c: " << hipblas_datatype_to_string(arg.c_type)
+                       << " d: " << hipblas_datatype_to_string(arg.d_type)
                        << " compute:" << hipblaslt_computetype_to_string(arg.compute_type)
                        << std::endl;
         hipblaslt_abort();

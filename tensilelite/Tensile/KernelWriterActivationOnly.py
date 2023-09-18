@@ -184,7 +184,8 @@ class KernelWriterActivationOnly(KernelWriterBase):
     ########################################
     # Activation
     typeStr = self.state["ProblemType"]["DestDataType"].toDevice(self.language)
-    typeActivationStr = self.state["ProblemType"]["ActivationComputeDataType"].toDevice(self.language)
+    typeActivationStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language) if self.state["ProblemType"]["ActivationHPA"] else \
+                        self.state["ProblemType"]["DestDataType"].toDevice(self.language)
     if self.state["ProblemType"]["ActivationType"] != 'none':
       names = ""
       if self.state["ProblemType"]["ActivationType"] == 'all':
@@ -216,12 +217,11 @@ class KernelWriterActivationOnly(KernelWriterBase):
       name += indexChars[i].lower()
     name += "_"
     name += self.state["ProblemType"]["DestDataType"].toChar()
-    if self.state["ProblemType"]["ActivationType"] != 'none':
-      if self.state["ProblemType"]["ActivationType"] == 'all':
-        name += "_%s"%"A"
-      else:
-        name += "_%s"%str(self.state["ProblemType"]["ActivationType"]).upper()
-      name += self.state["ProblemType"]["ActivationComputeDataType"].toChar()
+    if self.state["ProblemType"]["ActivationType"] == 'all':
+      name += "_%s"%"A"
+    elif self.state["ProblemType"]["ActivationType"] != 'none':
+      name += "_%s"%str(self.state["ProblemType"]["ActivationType"]).upper()
+    name += ("h" if self.state["ProblemType"]["ActivationHPA"] else "")
     name += ("ng" if self.state["ProblemType"]["ActivationNoGuard"] else "")
 
     return name

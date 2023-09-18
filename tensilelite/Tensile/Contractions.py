@@ -64,11 +64,10 @@ class BoundIndex:
 
 
 class ProblemType:
-    StateKeys = ['operationIdentifier', 'transA', 'transB', 'computeInputType', 'aType', 'bType', 'cType', 'dType', 'eType', 'computeType',
-                 'useBeta', 'useBias', 'biasSrcWhiteList', 'useE', 'useScaleAB', 'useScaleCD', 'useScaleAlphaVec', 'biasDataTypeWhiteList',
-                 'highPrecisionAccumulate', 'useInitialStridesAB', 'useInitialStridesCD', 'stridedBatched', 'groupedGemm',
-                 'useGradient', 'activationType', 'activationArgLength', 'activationComputeDataType', 'activationNoGuard',
-                 'sparseA', 'f32XdlMathOp', 'supportDeviceUserArguments']
+    StateKeys = ['operationIdentifier', 'transA', 'transB', 'aType', 'bType', 'cType', 'dType', 'eType', 'computeType',
+                 'useBeta', 'useBias', 'biasSrcWhiteList', 'useE', 'useScaleDVec', 'biasDataTypeWhiteList', 'highPrecisionAccumulate',
+                 'useInitialStridesAB', 'useInitialStridesCD', 'stridedBatched', 'groupedGemm',
+                 'useGradient', 'activationType', 'activationHPA', 'activationNoGuard', 'sparseA', 'f32XdlMathOp']
     @classmethod
     def FromOriginalState(cls, d):
         indices = [None]*d['TotalIndices']
@@ -129,23 +128,8 @@ class ProblemType:
 
         rv.transA = bool(d['TransposeA'])
         rv.transB = bool(d['TransposeB'])
-        if 'DataTypeA' in d:
-            rv.aType = DataType(d['DataTypeA'])
-        else:
-            rv.aType = srcType
-        if 'DataTypeB' in d:
-            rv.bType = DataType(d['DataTypeB'])
-        else:
-            rv.bType = srcType
-        # for hybrid 8bit float types, we need to split the type into a_type and b_type
-        if srcType.isFloat8BFloat8():
-            rv.aType = DataType("F8")
-            rv.bType = DataType("B8")
-        elif srcType.isBFloat8Float8():
-            rv.aType = DataType("B8")
-            rv.bType = DataType("F8")
-
-        rv.computeInputType = srcType
+        rv.aType = srcType
+        rv.bType = srcType
         rv.cType = dstType
         rv.dType = dstType
         rv.eType = computeType
@@ -190,7 +174,6 @@ class ProblemType:
         rv.useBias               = False
         rv.biasDataTypeWhiteList = []
         rv.biasSrcWhiteList = []
-        rv.setConstStrideBias = []
         if 'UseBias' in d:
             rv.useBias = d['UseBias']
             if 'BiasDataTypeList' in d:
@@ -201,8 +184,6 @@ class ProblemType:
             if 'BiasSrc' in d:
                 m = ["A", "B", "C", "D"]
                 rv.biasSrcWhiteList = [m.index(d['BiasSrc'])]
-            if 'SetConstStrideBias' in d:
-                rv.setConstStrideBias = d['SetConstStrideBias']
 
         rv.useE = False
         if 'UseE' in d:
@@ -212,37 +193,31 @@ class ProblemType:
         if 'Gradient' in d:
             rv.useGradient = d["Gradient"]
 
-        rv.useScaleAB = False
-        if 'UseScaleAB' in d:
-            rv.useScaleAB = d['UseScaleAB']
-        rv.useScaleCD = False
-        if 'UseScaleCD' in d:
-            rv.useScaleCD = d['UseScaleCD']
-
-        rv.useScaleAlphaVec = False
-        if 'UseScaleAlphaVec' in d:
-            rv.useScaleAlphaVec = d['UseScaleAlphaVec']
+        rv.useScaleDVec = False
+        if 'UseScaleDVec' in d:
+            rv.useScaleDVec = d['UseScaleDVec']
 
         rv.batched = d['Batched']
 
-        rv.activationType      = ActivationType('none')
-        rv.activationArgLength = 0
+        rv.activationType = ActivationType('none')
         if 'ActivationType' in d:
-            rv.activationType = ActivationType(d['ActivationType'])
-            rv.activationArgLength = len(rv.activationType.getAdditionalArgStringList())
-        rv.activationComputeDataType = DataType(d['ActivationComputeDataType'])
+            rv.activationType = d['ActivationType']
+        rv.activationHPA = False
+        if 'ActivationHPA' in d:
+            rv.activationHPA = d['ActivationHPA']
         rv.activationNoGuard = False
         if 'ActivationNoGuard' in d:
             rv.activationNoGuard = d["ActivationNoGuard"]
+        if 'ActivationComputeDataType' in d:
+            rv.activationComputeDataType = DataType(d['ActivationComputeDataType'])
+        else:
+            rv.activationComputeDataType = DataType(d['ComputeDataType'] if rv.activationHPA else \
+                                                    d['DestDataType'])
         rv.sparseA = False
         if 'SparseA' in d:
             rv.sparseA = d['SparseA']
 
         rv.f32XdlMathOp = DataType(d['F32XdlMathOp']) if 'F32XdlMathOp' in d else DataType(0)
-
-        rv.supportDeviceUserArguments = False
-        if 'SupportUserArgs' in d:
-            rv.supportDeviceUserArguments = d['SupportUserArgs']
         return rv
 
     def __init__(self, freeIndices=None, batchIndices=None, boundIndices=None, aDims=None, bDims=None, cDims=None, dDims=None):
@@ -334,30 +309,27 @@ class ProblemType:
                 predicates.append(ProblemPredicate("BetaZero"))
             predicates.append(ProblemPredicate("BiasDataTypeWhiteList", value=self.biasDataTypeWhiteList))
             predicates.append(ProblemPredicate("BiasSrcWhiteList", value=self.biasSrcWhiteList))
+            predicates.append(ProblemPredicate("Activation", value=self.activationType))
             if self.activationType == 'all':
                 exportType = ActivationType.Export.GRADONLY if self.useGradient else ActivationType.Export.NORMAL
                 enumList = [actEnum.capitalize() for actEnum in ActivationType.getEnumStrList(self.activationComputeDataType, exportType=exportType)]
                 predicates.append(ProblemPredicate("ActivationEnumWhiteList", value=enumList))
-            # predicates.append(ProblemPredicate("UseScaleAlphaVec", value=self.useScaleAlphaVec))
+            # predicates.append(ProblemPredicate("UseScaleDVec", value=self.useScaleDVec))
             # predicates.append(ProblemPredicate("GroupedGemm", value=self.groupedGemm))
 
         if includeType:
-            predicates.append(ProblemPredicate("TypesEqual", value=(self.aType, self.bType, self.cType, self.dType, self.computeInputType)))
+            predicates.append(ProblemPredicate("TypesEqual", value=(self.aType, self.bType, self.cType, self.dType)))
             predicates.append(ProblemPredicate("HighPrecisionAccumulate", value=self.highPrecisionAccumulate))
-            predicates.append(ProblemPredicate("Activation", value=self.activationType))
-            predicates.append(ProblemPredicate("ActivationComputeType", value=self.activationComputeDataType))
+            predicates.append(ProblemPredicate("ActivationHPA", value=self.activationHPA))
             predicates.append(ProblemPredicate("ActivationNoGuard", value=self.activationNoGuard))
             predicates.append(ProblemPredicate("UseGradient", value=self.useGradient))
             predicates.append(ProblemPredicate("UseBias", value=self.useBias))
             predicates.append(ProblemPredicate("UseE", value=self.useE))
             predicates.append(ProblemPredicate("StridedBatched", value=self.stridedBatched))
             predicates.append(ProblemPredicate("GroupedGemm", value=self.groupedGemm))
-            predicates.append(ProblemPredicate("UseScaleAB", value=self.useScaleAB))
-            predicates.append(ProblemPredicate("UseScaleCD", value=self.useScaleCD))
-            predicates.append(ProblemPredicate("UseScaleAlphaVec", value=self.useScaleAlphaVec))
+            predicates.append(ProblemPredicate("UseScaleDVec", value=self.useScaleDVec))
             predicates.append(ProblemPredicate("SparseA", value=self.sparseA))
             predicates.append(ProblemPredicate("F32XdlMathOp", value=self.f32XdlMathOp))
-            predicates.append(ProblemPredicate("SupportDeviceUserArguments", value=self.supportDeviceUserArguments))
 
         return predicates
 
@@ -410,16 +382,12 @@ class ProblemPredicate(Properties.Predicate):
     def CompoundPredicates(cls, state, problemType):
         rv = []
 
-        if "BatchSizeEqual" in state:
-            rv += [cls('BatchSizeEqual', index=0, value=state["BatchSizeEqual"])]
-
         if not problemType.aType.isInt8x4():
             # calculate the minimum supported free dimension size
             TLUA = state['ProblemType']['TLUA']
             TLUB = state['ProblemType']['TLUB']
-            minFree0 = state['GlobalReadVectorWidthA'] if TLUA else 1
-            minFree1 = state['GlobalReadVectorWidthB'] if TLUB else 1
-            minFree1 = 0 if state['ProblemType']['GroupedGemm'] else minFree1
+            minFree0 = state['GlobalLoadVectorWidthA'] if TLUA else 1
+            minFree1 = state['GlobalLoadVectorWidthB'] if TLUB else 1
             rv += [cls('LeadingFree0SizesGreaterOrEqual', value=minFree0)]
             rv += [cls('LeadingFree1SizesGreaterOrEqual', value=minFree1)]
 
@@ -441,11 +409,11 @@ class ProblemPredicate(Properties.Predicate):
         if 'BufferLoad' in state and state['BufferLoad'] == True:
             TLUA = state['ProblemType']['TLUA']
             TLUB = state['ProblemType']['TLUB']
-            MayShiftA = TLUA and state['AssertFree0ElementMultiple'] < state['GlobalReadVectorWidthA']
-            MayShiftB = TLUB and state['AssertFree1ElementMultiple'] < state['GlobalReadVectorWidthB']
+            MayShiftA = TLUA and state['AssertFree0ElementMultiple'] < state['GlobalLoadVectorWidthA']
+            MayShiftB = TLUB and state['AssertFree1ElementMultiple'] < state['GlobalLoadVectorWidthB']
             subrv={}
-            subrv['ShiftPtrElemB'] = state['GlobalReadVectorWidthB'] if MayShiftB else 0
-            subrv['ShiftPtrElemA'] = state['GlobalReadVectorWidthA'] if MayShiftA else 0
+            subrv['ShiftPtrElemB'] = state['GlobalLoadVectorWidthB'] if MayShiftB else 0
+            subrv['ShiftPtrElemA'] = state['GlobalLoadVectorWidthA'] if MayShiftA else 0
             subrv['DUorMT1'] = state['DepthU'] if TLUB else state['MacroTile1']
             subrv['DUorMT0'] = state['DepthU'] if TLUA else state['MacroTile0']
             # value is also a dict for better readibility, client side need to handel the serialization
@@ -491,7 +459,7 @@ class SizeMapping:
                  'globalAccumulation',
                  'workspaceSizePerElemC',
                  'workspaceSizePerElemBias',
-                 'activationFused', 'CustomKernelName'
+                 'activationFused'
                  ]
 
     @classmethod
@@ -515,8 +483,7 @@ class SizeMapping:
                    globalAccumulation       = globalAccum,
                    workspaceSizePerElemC    = d['_WorkspaceSizePerElemC'],
                    workspaceSizePerElemBias = d['_WorkspaceSizePerElemBias'],
-                   activationFused          = d['ActivationFused'],
-                   CustomKernelName         = d['CustomKernelName']
+                   activationFused          = d['ActivationFused']
                    )
 
     @classmethod
@@ -532,7 +499,6 @@ class SizeMapping:
 
 class Solution:
     StateKeys = ['name',
-                 'kernelName',
                 'problemType',
                 'hardwarePredicate',
                 'problemPredicate',
@@ -555,9 +521,6 @@ class Solution:
 
         if 'SolutionNameMin' in d:
             rv.name = d['SolutionNameMin']
-
-        if 'KernelNameMin' in d:
-            rv.kernelName = d['KernelNameMin']
 
         rv.problemType = ProblemType.FromOriginalState(d['ProblemType'])
 
@@ -589,10 +552,6 @@ class Solution:
             else:
                 d['ISA'] = [0,0,0]
 
-        if 'CUCount' not in d:
-            d['CUCount'] = None
-
-        rv.hardwarePredicate = Hardware.HardwarePredicate.FromHardware(d['ISA'], d['CUCount'])
         rv.originalSolution = OriginalSolution(d)
 
         return rv

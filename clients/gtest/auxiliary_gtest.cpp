@@ -2,7 +2,7 @@
  *
  * MIT License
  *
- * Copyright (C) 2022-2023 Advanced Micro Devices, Inc.
+ * Copyright (C) 2022 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -42,35 +42,20 @@ namespace
     // In the general case of <Ti, To, Tc>, these tests do not apply, and if this
     // functor is called, an internal error message is generated. When converted
     // to bool, this functor returns false.
-    template <typename TiA,
-              typename TiB = TiA,
-              typename To  = TiB,
-              typename Tc  = To,
-              typename     = void>
+    template <typename Ti, typename To = Ti, typename Tc = To, typename = void>
     struct aux_testing : hipblaslt_test_invalid
     {
     };
 
     // When Ti = To = Tc != void, this test applies.
     // When converted to bool, this functor returns true.
-    template <typename TiA, typename TiB, typename To, typename Tc>
+    template <typename Ti, typename To, typename Tc>
     struct aux_testing<
-        TiA,
-        TiB,
+        Ti,
         To,
         Tc,
-        std::enable_if_t<
-            (std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblasLtHalf>{})
-            || (std::is_same<TiA, hip_bfloat16>{} && std::is_same<TiB, hip_bfloat16>{})
-            || (std::is_same<TiA, float>{} && std::is_same<TiB, float>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_f8>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblaslt_bf8>{})
-            || (std::is_same<TiA, hipblaslt_bf8>{} && std::is_same<TiB, hipblaslt_f8>{})
-            || (std::is_same<TiA, double>{} && std::is_same<TiB, double>{})
-            || (std::is_same<TiA, hipblasLtInt8>{} && std::is_same<TiB, hipblasLtInt8>{})
-            || (std::is_same<TiA, hipblaslt_f8>{} && std::is_same<TiB, hipblasLtHalf>{})
-            || (std::is_same<TiA, hipblasLtHalf>{} && std::is_same<TiB, hipblaslt_f8>{})>>
-        : hipblaslt_test_valid
+        std::enable_if_t<std::is_same<Ti, hipblasLtHalf>{} || std::is_same<Ti, hip_bfloat16>{}
+                         || std::is_same<Ti, float>{}>> : hipblaslt_test_valid
     {
         void operator()(const Arguments& arg)
         {
@@ -157,7 +142,7 @@ namespace
         {
             RocBlasLt_TestName<aux_test> name(arg.name);
 
-            name << hipblaslt_datatype_to_string(arg.a_type);
+            name << hipblas_datatype_to_string(arg.a_type);
 
             return std::move(name);
         }

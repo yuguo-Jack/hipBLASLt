@@ -32,35 +32,6 @@
 #include <ostream>
 #include <utility>
 
-/*! \brief device matches pattern */
-bool gpu_arch_match(const std::string& gpu_arch, const char pattern[4])
-{
-    auto removePrefix = [](const std::string& s) {
-        size_t pos = s.find("gfx");
-        if(pos != std::string::npos)
-        {
-            return s.substr(pos + 3);
-        }
-        return s;
-    };
-
-    auto        gpu_arch_no_prefix = removePrefix(gpu_arch);
-    int         gpu_len            = gpu_arch_no_prefix.length();
-    const char* gpu                = gpu_arch_no_prefix.c_str();
-
-    for(int i = 0; i < 4; i++)
-    {
-        //hipblaslt_cout << pattern[i];
-        if(!pattern[i])
-            break;
-        else if(pattern[i] == '?')
-            continue;
-        else if(i >= gpu_len || pattern[i] != gpu[i])
-            return false;
-    }
-    //hipblaslt_cout << " : match gpu_arch " << gpu_arch << std:: endl;
-    return true;
-};
 void Arguments::init()
 {
     // match python in hipblaslt_common.py
@@ -73,23 +44,23 @@ void Arguments::init()
     alpha = 1.0;
     beta  = 0.0;
 
-    memset(stride_a, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(stride_b, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(stride_c, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(stride_d, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(stride_e, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
+    stride_a = 0;
+    stride_b = 0;
+    stride_c = 0;
+    stride_d = 0;
+    stride_e = 0;
 
     user_allocated_workspace = 0;
 
-    M[0] = 128;
-    N[0] = 128;
-    K[0] = 128;
+    M = 128;
+    N = 128;
+    K = 128;
 
-    memset(lda, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(ldb, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(ldc, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(ldd, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
-    memset(lde, 0, sizeof(int64_t) * MAX_SUPPORTED_NUM_PROBLEMS);
+    lda = 0;
+    ldb = 0;
+    ldc = 0;
+    ldd = 0;
+    lde = 0;
 
     batch_count = 1;
 
@@ -99,12 +70,12 @@ void Arguments::init()
     algo           = 0;
     solution_index = 0;
 
-    a_type       = HIPBLASLT_R_16F;
-    b_type       = HIPBLASLT_R_16F;
-    c_type       = HIPBLASLT_R_16F;
-    d_type       = HIPBLASLT_R_16F;
+    a_type       = HIPBLAS_R_16F;
+    b_type       = HIPBLAS_R_16F;
+    c_type       = HIPBLAS_R_16F;
+    d_type       = HIPBLAS_R_16F;
     compute_type = HIPBLASLT_COMPUTE_F32;
-    scale_type   = HIPBLASLT_R_32F;
+    scale_type   = HIPBLAS_R_32F;
 
     initialization = hipblaslt_initialization::hpl;
 
@@ -128,15 +99,10 @@ void Arguments::init()
     activation_type   = hipblaslt_activation_type::none;
     activation_arg1   = 0.0f;
     activation_arg2   = std::numeric_limits<float>::infinity();
-    bias_type         = static_cast<hipblasltDatatype_t>(-1);
+    bias_type         = static_cast<hipblasDatatype_t>(-1);
     bias_source       = hipblaslt_bias_source::d;
     bias_vector       = false;
-    scaleA            = false;
-    scaleB            = false;
-    scaleC            = false;
-    scaleD            = false;
-    scaleE            = false;
-    scaleAlpha_vector = false;
+    scaleD_vector     = false;
     grouped_gemm      = 0;
     c_noalias_d       = false;
     HMM               = false;
@@ -146,8 +112,7 @@ void Arguments::init()
 
     use_ext            = false;
     use_ext_setproblem = false;
-    algo_method        = 0;
-    use_user_args      = false;
+    use_findallalgo    = false;
 }
 
 // Function to print Arguments out to stream in YAML format

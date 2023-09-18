@@ -37,99 +37,6 @@
 
 namespace Tensile
 {
-    template <typename T>
-    class KernelArgumentsContainer
-    {
-    public:
-        void setPointer(void* pointer, size_t size)
-        {
-            m_data     = (T*)pointer;
-            m_dataSize = size;
-        }
-
-        void reserve(size_t maxSize)
-        {
-            m_maxSize = maxSize;
-            if(!m_data)
-            {
-                m_vec_data.reserve(maxSize);
-            }
-        }
-
-        void insert(size_t startPos, size_t size, T value)
-        {
-            if(!m_data)
-            {
-                m_vec_data.insert(m_vec_data.end(), size, value);
-                m_currentLocation = m_vec_data.size();
-                return;
-            }
-            else if(startPos + size < m_dataSize)
-            {
-                // We don't insert 0 here because we'll copy data later.
-                // Adding this API is to compatible with vector insert.
-                // for(size_t i = startPos; i < startPos + size; i++)
-                // {
-                //     m_data[i] = value;
-                // }
-                m_currentLocation += size;
-            }
-        }
-
-        size_t size() const
-        {
-            return m_currentLocation;
-        }
-
-        size_t end() const
-        {
-            return m_currentLocation;
-        }
-
-        const uint8_t* data() const
-        {
-            if(!m_data)
-            {
-                return m_vec_data.data();
-            }
-            return (const uint8_t*)m_data;
-        }
-
-        uint8_t* rawdata()
-        {
-            if(!m_data)
-            {
-                T* ptr = m_vec_data.data();
-                return ptr;
-            }
-            return (uint8_t*)m_data;
-        }
-
-        const T& operator[](unsigned int i) const
-        {
-            if(!m_data)
-            {
-                return m_vec_data[i];
-            }
-            return m_data[i];
-        }
-
-        T& operator[](unsigned int i)
-        {
-            if(!m_data)
-            {
-                return m_vec_data[i];
-            }
-            return m_data[i];
-        }
-
-    private:
-        size_t         m_maxSize         = 0;
-        size_t         m_currentLocation = 0;
-        T*             m_data            = nullptr;
-        size_t         m_dataSize;
-        std::vector<T> m_vec_data;
-    };
 
     class TENSILE_API KernelArguments
     {
@@ -155,7 +62,6 @@ namespace Tensile
         bool isFullyBound() const;
 
         void const* data() const;
-        uint8_t*    rawdata();
         size_t      size() const;
 
         friend std::ostream& operator<<(std::ostream& stream, const KernelArguments& t);
@@ -196,8 +102,6 @@ namespace Tensile
         const_iterator begin() const;
         const_iterator end() const;
 
-        void useExternalPointer(void* pointer, size_t size);
-
     private:
         enum
         {
@@ -224,7 +128,7 @@ namespace Tensile
         template <typename T>
         void writeValue(size_t offset, T value);
 
-        KernelArgumentsContainer<uint8_t> m_data;
+        std::vector<uint8_t> m_data;
 
         std::vector<std::string>             m_names;
         std::unordered_map<std::string, Arg> m_argRecords;
@@ -409,76 +313,4 @@ namespace Tensile
         }
         return *reinterpret_cast<T*>(const_cast<void*>(m_value.first));
     }
-
-    class KernelArgumentsCounter
-    {
-    public:
-        KernelArgumentsCounter() {}
-        ~KernelArgumentsCounter() {}
-
-        // Dummy function
-        void reserve(size_t bytes, size_t count) {}
-
-        inline void append(std::string const& name, ConstantVariant const& value, DataType type)
-        {
-            switch(type)
-            {
-            case DataType::Float:
-                return append<float>(name, (*std::get_if<float>(&value)));
-            case DataType::Double:
-                return append<double>(name, (*std::get_if<double>(&value)));
-            case DataType::Half:
-                return append<Half>(name, (*std::get_if<Half>(&value)));
-            case DataType::Int32:
-                return append<int32_t>(name, (*std::get_if<int32_t>(&value)));
-            case DataType::BFloat16:
-                return append<BFloat16>(name, (*std::get_if<BFloat16>(&value)));
-            case DataType::Int8:
-                return append<int8_t>(name, (*std::get_if<int8_t>(&value)));
-            default:
-                throw std::runtime_error("Unsupported ConstantVariant append type.");
-            }
-        }
-
-        inline void append(std::string const& name, float const value, DataType type)
-        {
-            switch(type)
-            {
-            case DataType::Float:
-                return append<float>(name, value);
-            case DataType::Double:
-                return append<double>(name, (double const)value);
-            case DataType::Half:
-                return append<Half>(name, (Half const)value);
-            case DataType::Int32:
-                return append<int32_t>(name, (int32_t const)value);
-            case DataType::BFloat16:
-                return append<BFloat16>(name, (BFloat16 const)value);
-            case DataType::Int8:
-                return append<int8_t>(name, (int8_t const)value);
-            default:
-                throw std::runtime_error("Unsupported ConstantVariant append type.");
-            }
-        }
-
-        template <typename T>
-        inline void append(std::string const& name, T value)
-        {
-            counter += sizeof(value);
-        }
-
-        template <typename T>
-        inline void appendUnbound(std::string const& name)
-        {
-            append(name, static_cast<T>(0));
-        }
-
-        const size_t size() const
-        {
-            return counter;
-        }
-
-    private:
-        size_t counter = 0;
-    };
 } // namespace Tensile

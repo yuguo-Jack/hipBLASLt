@@ -878,8 +878,8 @@ namespace Tensile
                 m_problemDependentData
                     = m_problemDependentData || IsProblemDependent(m_vdata[i].init);
             }
-            m_problemDependentData
-                |= (m_aSparse | (args["bias-type-args"].as<std::vector<DataType>>().size() > 1));
+            m_problemDependentData |= m_aSparse;
+
             allocNewCPUInputs();
             allocNewGPUInputs();
 
@@ -1100,7 +1100,7 @@ namespace Tensile
         void DataInitialization::initializeGPUBatchedInputs(ContractionProblemGemm const& problem)
         {
             auto batchIdxs = problem.batchIndices();
-            // FIXME: batch not supported for bias
+            // FIXME: batch not supported for bias and scaleDVec
             for(size_t i = 0; i < 4 /*m_vdata.size()*/; i++)
             {
                 auto&               pUnit = m_vdata[i].pristine[problem.tensors()[i].dataType()];
@@ -1139,34 +1139,6 @@ namespace Tensile
                                     pUnit.gpuInput.batch.get(),
                                     problem.tensors()[i],
                                     batchIdx);
-
-                if(problem.useBias() && problem.biasSrc() == i)
-                {
-                    auto& pUnitBias = m_vdata[ContractionProblemGemm::TENSOR::BIAS]
-                                          .pristine[problem.bias().dataType()];
-                    if(m_curBoundsCheck == BoundsCheckMode::NaN)
-                    {
-                        padding = (pUnitBias.maxElements
-                                   - problem.tensors()[ContractionProblemGemm::TENSOR::BIAS]
-                                         .totalAllocatedElements())
-                                  / 2;
-                    }
-                    else if(m_curBoundsCheck == BoundsCheckMode::GuardPageBack)
-                    {
-                        padding = pUnitBias.maxElements
-                                  - problem.tensors()[ContractionProblemGemm::TENSOR::BIAS]
-                                        .totalAllocatedElements();
-                    }
-                    padding
-                        *= DataTypeInfo::Get(
-                               problem.tensors()[ContractionProblemGemm::TENSOR::BIAS].dataType())
-                               .elementSize;
-                    uint8_t* offset = (uint8_t*)pUnitBias.gpuInput.current.get();
-                    initGPUBatchedInput((void*)(offset + padding),
-                                        pUnitBias.gpuInput.batch.get(),
-                                        problem.tensors()[ContractionProblemGemm::TENSOR::BIAS],
-                                        batchIdx);
-                }
 
                 if(problem.sparseA() && i == ContractionProblemGemm::TENSOR::A)
                 {
@@ -1268,16 +1240,8 @@ namespace Tensile
                     case DataType::Int8x4:
                         prop.value = getValue<Int8x4>(prop.init, prop.freeValue);
                         break;
-                    case DataType::Float8:
-                        prop.value = getValue<Float8>(prop.init, prop.freeValue);
-                        break;
-                    case DataType::BFloat8:
-                        prop.value = getValue<BFloat8>(prop.init, prop.freeValue);
-                        break;
                     case DataType::XFloat32:
-                    case DataType::Count:
-                    case DataType::Float8BFloat8:
-                    case DataType::BFloat8Float8:;
+                    case DataType::Count:;
                     }
                 }
                 if(Debug::Instance().printTensorInfo() && prop.dataType != DataType::None)
@@ -1514,24 +1478,19 @@ namespace Tensile
                                                       bool                isGPU,
                                                       ContractionInputs*  inputs)
         {
-            inputs->a             = (void*)ptrs[ContractionProblemGemm::TENSOR::A];
-            inputs->b             = (void*)ptrs[ContractionProblemGemm::TENSOR::B];
-            inputs->c             = (void*)ptrs[ContractionProblemGemm::TENSOR::C];
-            inputs->d             = (void*)ptrs[ContractionProblemGemm::TENSOR::D];
-            inputs->e             = (void*)ptrs[ContractionProblemGemm::TENSOR::E];
-            inputs->bias          = (void*)ptrs[ContractionProblemGemm::TENSOR::BIAS];
-            inputs->scaleA        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEA];
-            inputs->scaleB        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEB];
-            inputs->scaleC        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEC];
-            inputs->scaleD        = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALED];
-            inputs->scaleAlphaVec = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEALPHAVEC];
-            inputs->metadata      = (unsigned char*)ptrs[ContractionProblemGemm::TENSOR::METADATA];
+            inputs->a         = (void*)ptrs[ContractionProblemGemm::TENSOR::A];
+            inputs->b         = (void*)ptrs[ContractionProblemGemm::TENSOR::B];
+            inputs->c         = (void*)ptrs[ContractionProblemGemm::TENSOR::C];
+            inputs->d         = (void*)ptrs[ContractionProblemGemm::TENSOR::D];
+            inputs->e         = (void*)ptrs[ContractionProblemGemm::TENSOR::E];
+            inputs->bias      = (void*)ptrs[ContractionProblemGemm::TENSOR::BIAS];
+            inputs->scaleDVec = (void*)ptrs[ContractionProblemGemm::TENSOR::SCALEDVEC];
+            inputs->metadata  = (unsigned char*)ptrs[ContractionProblemGemm::TENSOR::METADATA];
 
-            inputs->batchA    = (void**)batchPtrs[ContractionProblemGemm::TENSOR::A];
-            inputs->batchB    = (void**)batchPtrs[ContractionProblemGemm::TENSOR::B];
-            inputs->batchC    = (void**)batchPtrs[ContractionProblemGemm::TENSOR::C];
-            inputs->batchD    = (void**)batchPtrs[ContractionProblemGemm::TENSOR::D];
-            inputs->batchBias = (void**)batchPtrs[ContractionProblemGemm::TENSOR::BIAS];
+            inputs->batchA = (void**)batchPtrs[ContractionProblemGemm::TENSOR::A];
+            inputs->batchB = (void**)batchPtrs[ContractionProblemGemm::TENSOR::B];
+            inputs->batchC = (void**)batchPtrs[ContractionProblemGemm::TENSOR::C];
+            inputs->batchD = (void**)batchPtrs[ContractionProblemGemm::TENSOR::D];
 
             inputs->gpu = isGPU;
 
@@ -1602,39 +1561,11 @@ namespace Tensile
                         += offsets[ContractionProblemGemm::TENSOR::BIAS][idx]
                            * problem.tensors()[ContractionProblemGemm::TENSOR::BIAS].elementBytes();
                 }
-                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALEA] != nullptr)
+                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALEDVEC] != nullptr)
                 {
-                    u8Ptr[ContractionProblemGemm::TENSOR::SCALEA]
-                        += offsets[ContractionProblemGemm::TENSOR::SCALEA][idx]
-                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALEA]
-                                 .elementBytes();
-                }
-                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALEB] != nullptr)
-                {
-                    u8Ptr[ContractionProblemGemm::TENSOR::SCALEB]
-                        += offsets[ContractionProblemGemm::TENSOR::SCALEB][idx]
-                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALEB]
-                                 .elementBytes();
-                }
-                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALEC] != nullptr)
-                {
-                    u8Ptr[ContractionProblemGemm::TENSOR::SCALEC]
-                        += offsets[ContractionProblemGemm::TENSOR::SCALEC][idx]
-                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALEC]
-                                 .elementBytes();
-                }
-                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALED] != nullptr)
-                {
-                    u8Ptr[ContractionProblemGemm::TENSOR::SCALED]
-                        += offsets[ContractionProblemGemm::TENSOR::SCALED][idx]
-                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALED]
-                                 .elementBytes();
-                }
-                if(u8Ptr[ContractionProblemGemm::TENSOR::SCALEALPHAVEC] != nullptr)
-                {
-                    u8Ptr[ContractionProblemGemm::TENSOR::SCALEALPHAVEC]
-                        += offsets[ContractionProblemGemm::TENSOR::SCALEALPHAVEC][idx]
-                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALEALPHAVEC]
+                    u8Ptr[ContractionProblemGemm::TENSOR::SCALEDVEC]
+                        += offsets[ContractionProblemGemm::TENSOR::SCALEDVEC][idx]
+                           * problem.tensors()[ContractionProblemGemm::TENSOR::SCALEDVEC]
                                  .elementBytes();
                 }
             }

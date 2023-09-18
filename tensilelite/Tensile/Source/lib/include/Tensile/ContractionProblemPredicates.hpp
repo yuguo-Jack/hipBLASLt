@@ -958,7 +958,7 @@ namespace Tensile
                 };
                 TypesEqual() = default;
 
-                std::array<DataType, 5> value;
+                std::array<DataType, 4> value;
 
                 static std::string Type()
                 {
@@ -969,8 +969,7 @@ namespace Tensile
                 {
                     return problem.a().dataType() == value[0] && problem.b().dataType() == value[1]
                            && problem.c().dataType() == value[2]
-                           && problem.d().dataType() == value[3]
-                           && problem.computeInputType() == value[4];
+                           && problem.d().dataType() == value[3];
                 }
 
                 virtual std::string toString() const override
@@ -983,9 +982,7 @@ namespace Tensile
                                        ", c:",
                                        value[2],
                                        ", d:",
-                                       value[3],
-                                       ", compute input type:",
-                                       value[4]);
+                                       value[3]);
                 }
 
                 virtual bool debugEval(ContractionProblemGemm const& problem,
@@ -997,8 +994,7 @@ namespace Tensile
                            << "&& b:" << problem.b().dataType() << " == " << value[1]
                            << "&& c:" << problem.c().dataType() << " == " << value[2]
                            << "&& d:" << problem.d().dataType() << " == " << value[3]
-                           << "&& compute input type:" << problem.computeInputType()
-                           << " == " << value[4] << "): " << rv;
+                           << "): " << rv;
                     ;
 
                     return rv;
@@ -1556,20 +1552,6 @@ namespace Tensile
                 {
                     return problem.activationType() == value;
                 }
-
-                virtual std::string toString() const override
-                {
-                    return concatenate(this->type(), ":", ToString(value));
-                }
-
-                virtual bool debugEval(ContractionProblemGemm const& problem,
-                                       std::ostream&                 stream) const override
-                {
-                    bool rv = (*this)(problem);
-                    stream << this->type() << "(" << ToString(problem.activationType())
-                           << " == " << ToString(value) << "(solution)): " << rv;
-                    return rv;
-                }
             };
 
             struct ActivationEnumWhiteList
@@ -1616,32 +1598,30 @@ namespace Tensile
                 }
             };
 
-            struct ActivationComputeTypeEqual
-                : public Predicate_CRTP<ActivationComputeTypeEqual, ContractionProblemGemm>
+            struct ActivationHPAEqual
+                : public Predicate_CRTP<ActivationHPAEqual, ContractionProblemGemm>
             {
                 enum
                 {
                     HasIndex = false,
                     HasValue = true
                 };
-                DataType value;
+                bool value;
 
-                ActivationComputeTypeEqual() = default;
-                ActivationComputeTypeEqual(DataType value)
+                ActivationHPAEqual() = default;
+                ActivationHPAEqual(bool value)
                     : value(value)
                 {
                 }
 
                 static std::string Type()
                 {
-                    return "ActivationComputeType";
+                    return "ActivationHPA";
                 }
 
                 virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
-                    if(problem.activationType() == ActivationType::None)
-                        return true;
-                    return problem.activationComputeType() == value;
+                    return problem.activationHPA() == value;
                 }
             };
 
@@ -1724,7 +1704,8 @@ namespace Tensile
                 }
             };
 
-            struct UseScaleABEqual : public Predicate_CRTP<UseScaleABEqual, ContractionProblemGemm>
+            struct UseScaleDVecEqual
+                : public Predicate_CRTP<UseScaleDVecEqual, ContractionProblemGemm>
             {
                 enum
                 {
@@ -1733,73 +1714,20 @@ namespace Tensile
                 };
                 bool value;
 
-                UseScaleABEqual() = default;
-                UseScaleABEqual(bool value)
+                UseScaleDVecEqual() = default;
+                UseScaleDVecEqual(bool value)
                     : value(value)
                 {
                 }
 
                 static std::string Type()
                 {
-                    return "UseScaleAB";
+                    return "UseScaleDVec";
                 }
 
                 virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
-                    return problem.useScaleAB() == value;
-                }
-            };
-
-            struct UseScaleCDEqual : public Predicate_CRTP<UseScaleCDEqual, ContractionProblemGemm>
-            {
-                enum
-                {
-                    HasIndex = false,
-                    HasValue = true
-                };
-                bool value;
-
-                UseScaleCDEqual() = default;
-                UseScaleCDEqual(bool value)
-                    : value(value)
-                {
-                }
-
-                static std::string Type()
-                {
-                    return "UseScaleCD";
-                }
-
-                virtual bool operator()(ContractionProblemGemm const& problem) const override
-                {
-                    return problem.useScaleCD() == value;
-                }
-            };
-
-            struct UseScaleAlphaVecEqual
-                : public Predicate_CRTP<UseScaleAlphaVecEqual, ContractionProblemGemm>
-            {
-                enum
-                {
-                    HasIndex = false,
-                    HasValue = true
-                };
-                bool value;
-
-                UseScaleAlphaVecEqual() = default;
-                UseScaleAlphaVecEqual(bool value)
-                    : value(value)
-                {
-                }
-
-                static std::string Type()
-                {
-                    return "UseScaleAlphaVec";
-                }
-
-                virtual bool operator()(ContractionProblemGemm const& problem) const override
-                {
-                    return problem.useScaleAlphaVec() == value;
+                    return problem.useScaleDVec() == value;
                 }
             };
 
@@ -1907,19 +1835,6 @@ namespace Tensile
                     }
                     return std::string("The supported bias source are: " + biasString);
                 }
-                virtual bool debugEval(ContractionProblemGemm const& problem,
-                                       std::ostream&                 stream) const override
-                {
-                    bool        rv         = (*this)(problem);
-                    std::string biasString = "";
-                    for(size_t i = 0; i < value.size(); i++)
-                    {
-                        biasString += ToString(value[i]) + ", ";
-                    }
-                    stream << this->type() << "(Problem: " << problem.biasSrc()
-                           << ". Solution: " << biasString << "): " << rv;
-                    return rv;
-                }
             };
 
             struct SparseA : public Predicate_CRTP<SparseA, ContractionProblemGemm>
@@ -1972,52 +1887,6 @@ namespace Tensile
                 virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
                     return problem.f32XdlMathOp() == value;
-                }
-            };
-
-            struct SupportDeviceUserArguments
-                : public Predicate_CRTP<SupportDeviceUserArguments, ContractionProblemGemm>
-            {
-                enum
-                {
-                    HasIndex = false,
-                    HasValue = true
-                };
-                bool value;
-
-                SupportDeviceUserArguments() = default;
-                SupportDeviceUserArguments(bool value)
-                    : value(value)
-                {
-                }
-
-                static std::string Type()
-                {
-                    return "SupportDeviceUserArguments";
-                }
-
-                virtual bool operator()(ContractionProblemGemm const& problem) const override
-                {
-                    if(problem.getUseDeviceUserArguments())
-                        return problem.getUseDeviceUserArguments() == value;
-                    return true;
-                }
-
-                virtual std::string toString() const override
-                {
-                    if(value)
-                        return "The solution supports DeviceUserArguments";
-                    else
-                        return "The solution does not support DeviceUserArguments";
-                }
-
-                virtual bool debugEval(ContractionProblemGemm const& problem,
-                                       std::ostream&                 stream) const override
-                {
-                    bool rv = (*this)(problem);
-                    stream << this->type() << "(" << problem.getUseDeviceUserArguments()
-                           << " == " << value << "(solution)): " << rv;
-                    return rv;
                 }
             };
         } // namespace Contraction

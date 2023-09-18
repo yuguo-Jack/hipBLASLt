@@ -92,22 +92,10 @@ class KernelWriterConversion(KernelWriterBase):
         biasPtrStr = self.state["ProblemType"]["BiasDataType"].toDevice(self.language)
         kStr += "  " + biasPtrStr + "* " + "Bias;" + self.endLine
 
-    # ScaleAB
-    if self.state["ProblemType"]["UseScaleAB"]:
-      scalePtrStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language)
-      kStr += "  " + scalePtrStr + " * " + "ScaleA;" + self.endLine
-      kStr += "  " + scalePtrStr + " * " + "ScaleB;" + self.endLine
-
-    # ScaleCD
-    if self.state["ProblemType"]["UseScaleCD"]:
-      scalePtrStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language)
-      kStr += "  " + scalePtrStr + " * " + "ScaleC;" + self.endLine
-      kStr += "  " + scalePtrStr + " * " + "ScaleD;" + self.endLine
-
-    # interface: ScaleAlphaVec GSU>1 GSUA "MUL"
-    if self.state["ProblemType"]["UseScaleAlphaVec"]:
-      scaleAlphaVecPtrStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language)
-      kStr += "  " + scaleAlphaVecPtrStr + " * " + "ScaleAlphaVec;" + self.endLine
+    # interface: ScaleDVec GSU>1 GSUA "MUL"
+    if self.state["ProblemType"]["UseScaleDVec"]:
+      scaleDVecPtrStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language)
+      kStr += "  " + scaleDVecPtrStr + " * " + "ScaleDVec;" + self.endLine
 
     # alpha & beta
     kStr += "  %s alpha;%s" % (self.state["ProblemType"]["ComputeDataType"].toDevice(self.language), self.endLine)
@@ -117,8 +105,10 @@ class KernelWriterConversion(KernelWriterBase):
     activationCDataType = self.state["ProblemType"]["ActivationComputeDataType"]
     enumName = "Tensile::%sActivationType_%s"%(self.actGradientPrefix, activationCDataType.toChar())
     if ((self.state["ProblemType"]["ActivationType"] != 'none') and self.state["ActivationFused"]):
+      activationCDataType = self.state["ProblemType"]["ComputeDataType"] if self.state["ProblemType"]["ActivationHPA"] else \
+                            self.state["ProblemType"]["DestDataType"]
       for name in self.state["ProblemType"]["ActivationType"].getAdditionalArgStringList():
-        kStr += "  %s %s;%s" % (self.state["ProblemType"]["ActivationComputeDataType"].toDevice(self.language), name, self.endLine)
+        kStr += "  %s %s;%s" % (activationCDataType.toDevice(self.language), name, self.endLine)
       if self.state["ProblemType"]["ActivationType"] == 'all':
         kStr += "  %s activationType;%s" % (enumName, self.endLine)
 
@@ -136,11 +126,6 @@ class KernelWriterConversion(KernelWriterBase):
       kStr += "  unsigned int strideW%s;%s" % (self.indexChars[i], self.endLine)
     for i in range(firstStrideCD, lastStrideC):
       kStr += "  unsigned int strideC%s;%s" % (self.indexChars[i], self.endLine)
-
-    if self.state["ProblemType"]["UseBias"] and \
-        (not self.state["ProblemType"]["Gradient"] or \
-          (self.state["ProblemType"]["Gradient"] and (self.state["ProblemType"]["BiasSrc"] == "A" or self.state["ProblemType"]["BiasSrc"] == "B"))):
-      kStr += "  unsigned int strideBias;%s" % (self.endLine)
 
     # sizes
     for i in range(0, self.state["ProblemType"]["NumIndicesC"]):
@@ -166,7 +151,7 @@ class KernelWriterConversion(KernelWriterBase):
 
     # kernel argument
     if self.state["ProblemType"]["GroupedGemm"]:
-      kStr += "  uint32_t* wiTablePtr, void* deviceUserArgsPtr, argument_%s* argsPtr, uint32_t gemm_count)" % ( self.kernelName ) + self.endLine
+      kStr += "  uint32_t* wiTablePtr, argument_%s* argsPtr, uint32_t gemm_count)" % ( self.kernelName ) + self.endLine
     else:
       kStr += "  argument_%s arg)" % ( self.kernelName ) + self.endLine
 
@@ -245,25 +230,8 @@ class KernelWriterConversion(KernelWriterBase):
       kStr += " + (IDX%s)*arg.strideC%s" % (indexChar, indexChar)
     kStr += " ))" + self.endLine
 
-    # GLOBAL_BIAS()
-    if self.state["ProblemType"]["UseBias"] and \
-       (not self.state["ProblemType"]["Gradient"] or \
-            (self.state["ProblemType"]["Gradient"] and (self.state["ProblemType"]["BiasSrc"] == "A" or self.state["ProblemType"]["BiasSrc"] == "B"))) \
-       and self.state["ProblemType"]["NumIndicesC"] > 2:
-      kStr += "#define GLOBAL_BIAS(IDX%s" % self.indexChars[0]
-      kStr += ", IDX%s" % self.indexChars[2]
-      indexChar = self.indexChars[0]
-      kStr += ") (( (IDX%s)" % (indexChar)
-      indexChar = self.indexChars[2]
-      kStr += " + (IDX%s)*arg.strideBias" % (indexChar)
-      kStr += " ))" + self.endLine
-
     self.num_dword_load = int(self.num_elements_load * self.state["ProblemType"]["ComputeDataType"].numBytes() / 4)
     self.num_dword_store = int(self.num_elements_load * self.state["ProblemType"]["DestDataType"].numBytes() / 4)
-    if self.state["ProblemType"]["DataType"].isDouble():
-      self.num_dword_load  = self.num_dword_load // 2
-    if self.state["ProblemType"]["DestDataType"].isDouble():
-      self.num_dword_store = self.num_dword_store // 2
     kStr += "#define NUM_ELEMENT_LOAD %d%s" % ( self.num_elements_load, self.endLine)
     kStr += "#define NUM_GSU %d%s" % (self.state["GlobalSplitU"], self.endLine)
 
@@ -377,15 +345,6 @@ class KernelWriterConversion(KernelWriterBase):
       kStr += '0'  if i in nonTileFreeIndices else ('id%d' % i)
     kStr += ");%s" % (self.endLine)
 
-    if self.state["ProblemType"]["UseBias"] and \
-       (not self.state["ProblemType"]["Gradient"] or \
-         (self.state["ProblemType"]["Gradient"] and (self.state["ProblemType"]["BiasSrc"] == "A" or self.state["ProblemType"]["BiasSrc"] == "B"))):
-      if problemType["NumIndicesC"] > 2:
-        kStr += "  %s idxBias = GLOBAL_BIAS((%s)id0, id2);%s" % (self.uint64Str, self.uint64Str, self.endLine)
-      else:
-        kStr += "  %s idxBias = id0;%s" % (self.uint64Str, self.uint64Str, self.endLine)
-
-
     ########################################
     # multi buffers GSU: Accumulate all GSU buffer
     intermediateDataType = self.datatype
@@ -404,25 +363,11 @@ class KernelWriterConversion(KernelWriterBase):
     kStr += "  " + intermediateDataType + " accum[NUM_ELEMENT_LOAD] = {0};" + self.endLine
     kStr += "  " + destTypeStr + " result[NUM_ELEMENT_LOAD];" + self.endLine
 
-    #Load scaleAB
-    if self.state["ProblemType"]["UseScaleAB"]:
-      kStr += "  " + intermediateDataType + " scaleA_data, scaleB_data;" + self.endLine
-      kStr += "  " + "scaleA_data = arg.ScaleA == nullptr ? 1 : *(arg.ScaleA);" + self.endLine
-      kStr += "  " + "scaleB_data = arg.ScaleB == nullptr ? 1 : *(arg.ScaleB);" + self.endLine
-
-    #Load scaleCD
-    if self.state["ProblemType"]["UseScaleCD"]:
-      kStr += "  " + intermediateDataType + " scaleC_data, scaleD_data;" + self.endLine
-      kStr += "  " + "scaleC_data = arg.ScaleC == nullptr ? 1 : *(arg.ScaleC);" + self.endLine
-      kStr += "  " + "scaleD_data = arg.ScaleD == nullptr ? 1 : *(arg.ScaleD);" + self.endLine
-
     #TODO: workspace type is half precision
     if self.state["ProblemType"]["UseBias"] and self.state["ProblemType"]["Gradient"] and self.state["ProblemType"]["BiasSrc"] == "D":
       kStr += "  auto idxW_ori = idxW;%s"%self.endLine
-
-    typeStr = "int" if self.state["ProblemType"]["DataType"].isInt8() or self.state["ProblemType"]["DataType"].isInt32() else ("double" if self.state["ProblemType"]["DataType"].isDouble() else "float")
-    loadTypeStr = "%s%s" % (typeStr, "" if self.num_dword_load == 1 else self.num_dword_load)
-    storeTypeStr = "%s%s" % (typeStr, self.num_dword_store) if self.num_dword_store >= 1 else destTypeStr
+    loadTypeStr = "float%s" % ( "" if self.num_dword_load == 1 else self.num_dword_load)
+    storeTypeStr = "float%s" % (self.num_dword_store) if self.num_dword_store >= 1 else destTypeStr
 
     #Bias A/B
     if self.state["ProblemType"]["UseBias"] and self.state["ProblemType"]["Gradient"] and (self.state["ProblemType"]["BiasSrc"] == "A" or self.state["ProblemType"]["BiasSrc"] == "B"):
@@ -457,42 +402,25 @@ class KernelWriterConversion(KernelWriterBase):
       kStr += "  buffer_load<%s, sizeof(%s), CacheOperation::Kind::Always>(temp[%d], arg.W, idxW * sizeof(%s), 0);%s" % (loadTypeStr, loadTypeStr, gsuIdx, self.datatype, self.endLine)
       kStr += "  idxW  += strideW;" + self.endLine
     kStr += self.endLine
-    castToIntermidate = ("(%s)" % intermediateDataType) if intermediateDataType != self.datatype else ""
+
     #Accumlate all D buffer
     for gsuIdx in range(self.state["GlobalSplitU"]):
       if self.num_dword_load == 1:
-        kStr += "  accum[0] += %stemp[%d];" % (castToIntermidate, gsuIdx) + self.endLine
+        kStr += "  accum[0] += temp[%d];" % gsuIdx + self.endLine
       elif self.num_dword_load >= 2:
-        kStr += "  accum[0] += %stemp[%d].x;" % (castToIntermidate, gsuIdx) + self.endLine
-        kStr += "  accum[1] += %stemp[%d].y;" % (castToIntermidate, gsuIdx) + self.endLine
+        kStr += "  accum[0] += temp[%d].x;" % gsuIdx + self.endLine
+        kStr += "  accum[1] += temp[%d].y;" % gsuIdx + self.endLine
       if self.num_dword_load == 4:
-        kStr += "  accum[2] += %stemp[%d].z;" % (castToIntermidate, gsuIdx) + self.endLine
-        kStr += "  accum[3] += %stemp[%d].w;" % (castToIntermidate, gsuIdx) + self.endLine
+        kStr += "  accum[2] += temp[%d].z;" % gsuIdx + self.endLine
+        kStr += "  accum[3] += temp[%d].w;" % gsuIdx + self.endLine
     kStr += self.endLine
 
     accumStr = "accum"
     resultStr = "result"
 
-    #scaleAB
-    if self.state["ProblemType"]["UseScaleAB"]:
-      kStr += "  arg.alpha = arg.alpha*scaleA_data*scaleB_data;%s" % (self.endLine)
-    kStr += self.endLine
-
     #alpha
     for vIdx in range(self.num_dword_load):
       kStr += "  %s[%d] *= (%s)arg.alpha;%s" % (accumStr, vIdx, intermediateDataType, self.endLine)
-    kStr += self.endLine
-
-    if self.state["ProblemType"]["UseScaleAlphaVec"]:
-      kStr += "  if(arg.ScaleAlphaVec != nullptr){" + self.endLine
-      for vIdx in range(self.num_dword_load):
-        kStr += "  %s[%d] *= (%s)arg.ScaleAlphaVec[id0+%d];%s" % (accumStr, vIdx, intermediateDataType, vIdx, self.endLine)
-      kStr += "  }" + self.endLine
-      kStr += self.endLine
-
-    #scaleC
-    if self.state["ProblemType"]["UseScaleCD"]:
-      kStr += "  arg.beta = arg.beta*scaleC_data;%s" % (self.endLine)
     kStr += self.endLine
 
     #Beta
@@ -506,7 +434,7 @@ class KernelWriterConversion(KernelWriterBase):
     if self.state["ProblemType"]["UseBias"] and (not self.state["ProblemType"]["Gradient"]):
       kStr += "  if(arg.Bias != 0){" + self.endLine
       for vIdx in range(self.num_dword_load):
-        kStr += "    %s[%d] += (%s)arg.Bias[idxBias+%d];%s" % (accumStr, vIdx, intermediateDataType, vIdx, self.endLine)
+        kStr += "    %s[%d] += (%s)arg.Bias[id0+%d];%s" % (accumStr, vIdx, intermediateDataType, vIdx, self.endLine)
       kStr += "  }" + self.endLine
       kStr += self.endLine
 
@@ -536,7 +464,8 @@ class KernelWriterConversion(KernelWriterBase):
 
     #Activation
     if ((self.state["ProblemType"]["ActivationType"] != 'none') and self.state["ActivationFused"]):
-      typeActivationStr = self.state["ProblemType"]["ActivationComputeDataType"].toDevice(self.language)
+      typeActivationStr = self.state["ProblemType"]["ComputeDataType"].toDevice(self.language) if self.state["ProblemType"]["ActivationHPA"] else \
+                          self.state["ProblemType"]["DestDataType"].toDevice(self.language)
       actArgs = ""
       if self.state["ProblemType"]["ActivationType"] == 'all':
         actArgs += ", arg.activationType"
@@ -549,11 +478,13 @@ class KernelWriterConversion(KernelWriterBase):
           kStr += "  %s[%d] = activation%s((%s)%s[%d]%s);%s" % (accumStr, vIdx, self.gaurdStr, typeActivationStr, accumStr, vIdx, actArgs, self.endLine)
       kStr += self.endLine
 
-    #scaleD
-    if self.state["ProblemType"]["UseScaleCD"]:
+    #ScaleDVec
+    if self.state["ProblemType"]["UseScaleDVec"]:
+      kStr += "  if(arg.ScaleDVec != nullptr){" + self.endLine
       for vIdx in range(self.num_dword_load):
-        kStr += "  %s[%d] *= scaleD_data;%s" % (accumStr, vIdx, self.endLine)
-    kStr += self.endLine
+        kStr += "    %s[%d] *= (%s)arg.ScaleDVec[id0+%d];%s" % (accumStr, vIdx, intermediateDataType, vIdx, self.endLine)
+      kStr += "  }" + self.endLine
+      kStr += self.endLine
 
     #Output high precision D to WS
     if self.state["ProblemType"]["UseBias"] and self.state["ProblemType"]["Gradient"] and self.state["ProblemType"]["BiasSrc"] == "D":
@@ -563,7 +494,7 @@ class KernelWriterConversion(KernelWriterBase):
     #Saturation
     if self.state["ProblemType"]["DestDataType"].isInt8() and self.state["ProblemType"]["HighPrecisionAccumulate"]:
       for vIdx in range(self.num_dword_load):
-        kStr += "  %s[%d] = min(127, max(-128, (int32_t)std::nearbyint(%s[%d])));%s" % (accumStr, vIdx, accumStr, vIdx, self.endLine)
+        kStr += "  %s[%d] *= min(127, max(-128, (int32_t)std::nearbyint(%s[%d])));%s" % (accumStr, vIdx, accumStr, vIdx, self.endLine)
       kStr += self.endLine
 
     #covert to output
@@ -587,8 +518,6 @@ class KernelWriterConversion(KernelWriterBase):
     kStr += "#undef GLOBAL_D%s" % (self.endLine)
     kStr += "#undef GLOBAL_W%s" % (self.endLine)
     kStr += "#undef GLOBAL_C%s" % (self.endLine)
-    if self.state["ProblemType"]["UseBias"]:
-      kStr += "#undef GLOBAL_BIAS%s" % (self.endLine)
     if self.state["ProblemType"]["UseE"]:
       kStr += "#undef GLOBAL_E%s" % (self.endLine)
 
@@ -609,8 +538,7 @@ class KernelWriterConversion(KernelWriterBase):
       name += "" if self.state["ProblemType"]["StridedBatched"] else "_GB"
     if self.state["ProblemType"]["UseBias"]:
       if self.state["ProblemType"]["Gradient"]:
-        name += "_DBias%s"%(self.state["ProblemType"]["BiasDataType"].toChar())
-        name += "_BiasSrc%s"%(self.state["ProblemType"]["BiasSrc"])
+        name += "_DBias%s%s"%(self.state["ProblemType"]["BiasSrc"], self.state["ProblemType"]["BiasDataType"].toChar())
       else:
         name += "_Bias%s"%self.state["ProblemType"]["BiasDataType"].toChar()
     if self.state["ProblemType"]["UseE"]:
@@ -624,11 +552,9 @@ class KernelWriterConversion(KernelWriterBase):
         name += "_A"
       else:
         name += "_%s"%str(self.state["ProblemType"]["ActivationType"]).upper()
-      name += self.state["ProblemType"]["ActivationComputeDataType"].toChar()
+      name += ("h" if self.state["ProblemType"]["ActivationHPA"] else "")
       name += ("ng" if self.state["ProblemType"]["ActivationNoGuard"] else "")
-    name += "_ScaleAB" if self.state["ProblemType"]["UseScaleAB"] else ""
-    name += "_ScaleCD" if self.state["ProblemType"]["UseScaleCD"] else ""
-    name += "_ScaleAlphaVec" if self.state["ProblemType"]["UseScaleAlphaVec"] else ""
+    name += "_ScaleDVec" if self.state["ProblemType"]["UseScaleDVec"] else ""
     name += "_PostGSU" + str(self.state["GlobalSplitU"])
     if self.num_elements_load != None:
       name += "_VW" + str(self.num_elements_load)

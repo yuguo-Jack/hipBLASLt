@@ -98,20 +98,17 @@ namespace Tensile
                     Base::template Pair<Predicates::Contraction::EqualityMatching>(),
                     Base::template Pair<Predicates::Contraction::UseGradientEqual>(),
                     Base::template Pair<Predicates::Contraction::ActivationEqual>(),
-                    Base::template Pair<Predicates::Contraction::ActivationComputeTypeEqual>(),
+                    Base::template Pair<Predicates::Contraction::ActivationHPAEqual>(),
                     Base::template Pair<Predicates::Contraction::ActivationNoGuardEqual>(),
                     Base::template Pair<Predicates::Contraction::ActivationEnumWhiteList>(),
                     Base::template Pair<Predicates::Contraction::UseBiasEqual>(),
                     Base::template Pair<Predicates::Contraction::UseEEqual>(),
-                    Base::template Pair<Predicates::Contraction::UseScaleABEqual>(),
-                    Base::template Pair<Predicates::Contraction::UseScaleCDEqual>(),
-                    Base::template Pair<Predicates::Contraction::UseScaleAlphaVecEqual>(),
+                    Base::template Pair<Predicates::Contraction::UseScaleDVecEqual>(),
                     Base::template Pair<Predicates::Contraction::BiasDataTypeWhiteList>(),
                     Base::template Pair<Predicates::Contraction::BiasSrcWhiteList>(),
                     Base::template Pair<Predicates::Contraction::SizeInRange>(),
                     Base::template Pair<Predicates::Contraction::SparseA>(),
                     Base::template Pair<Predicates::Contraction::F32XdlMathOpEqual>(),
-                    Base::template Pair<Predicates::Contraction::SupportDeviceUserArguments>(),
                 });
 
                 auto gmap = Generic::GetSubclasses();
@@ -395,8 +392,8 @@ namespace Tensile
         };
 
         template <typename IO>
-        struct MappingTraits<Predicates::Contraction::ActivationComputeTypeEqual, IO>
-            : public AutoMappingTraits<Predicates::Contraction::ActivationComputeTypeEqual, IO>
+        struct MappingTraits<Predicates::Contraction::ActivationHPAEqual, IO>
+            : public AutoMappingTraits<Predicates::Contraction::ActivationHPAEqual, IO>
         {
         };
 
@@ -419,20 +416,8 @@ namespace Tensile
         };
 
         template <typename IO>
-        struct MappingTraits<Predicates::Contraction::UseScaleABEqual, IO>
-            : public AutoMappingTraits<Predicates::Contraction::UseScaleABEqual, IO>
-        {
-        };
-
-        template <typename IO>
-        struct MappingTraits<Predicates::Contraction::UseScaleCDEqual, IO>
-            : public AutoMappingTraits<Predicates::Contraction::UseScaleCDEqual, IO>
-        {
-        };
-
-        template <typename IO>
-        struct MappingTraits<Predicates::Contraction::UseScaleAlphaVecEqual, IO>
-            : public AutoMappingTraits<Predicates::Contraction::UseScaleAlphaVecEqual, IO>
+        struct MappingTraits<Predicates::Contraction::UseScaleDVecEqual, IO>
+            : public AutoMappingTraits<Predicates::Contraction::UseScaleDVecEqual, IO>
         {
         };
 
@@ -470,12 +455,6 @@ namespace Tensile
         template <typename IO>
         struct MappingTraits<Predicates::Contraction::F32XdlMathOpEqual, IO>
             : public AutoMappingTraits<Predicates::Contraction::F32XdlMathOpEqual, IO>
-        {
-        };
-
-        template <typename IO>
-        struct MappingTraits<Predicates::Contraction::SupportDeviceUserArguments, IO>
-            : public AutoMappingTraits<Predicates::Contraction::SupportDeviceUserArguments, IO>
         {
         };
     } // namespace Serialization

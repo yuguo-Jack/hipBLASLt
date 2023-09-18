@@ -47,15 +47,14 @@ namespace Tensile
             m_printValids        = args["print-valids"].as<bool>();
             m_printMax           = args["print-max"].as<int>();
 
-            m_printTensorA    = args["print-tensor-a"].as<bool>();
-            m_printTensorB    = args["print-tensor-b"].as<bool>();
-            m_printTensorC    = args["print-tensor-c"].as<bool>();
-            m_printTensorD    = args["print-tensor-d"].as<bool>();
-            m_printTensorRef  = args["print-tensor-ref"].as<bool>();
-            m_printTensorBias = args["print-tensor-bias"].as<bool>();
+            m_printTensorA   = args["print-tensor-a"].as<bool>();
+            m_printTensorB   = args["print-tensor-b"].as<bool>();
+            m_printTensorC   = args["print-tensor-c"].as<bool>();
+            m_printTensorD   = args["print-tensor-d"].as<bool>();
+            m_printTensorRef = args["print-tensor-ref"].as<bool>();
 
             m_printAny = m_printTensorA || m_printTensorB || m_printTensorC || m_printTensorD
-                         || m_printTensorRef || m_printTensorBias;
+                         || m_printTensorRef;
 
             m_enabled = m_elementsToValidate != 0 || m_printAny;
         }
@@ -219,16 +218,6 @@ namespace Tensile
                                        validationStride);
             }
             break;
-            case DataType::Float8:
-            {
-                rv = checkResultsTyped(tensor,
-                                       (Float8 const*)refPtr,
-                                       (Float8 const*)resPtr,
-                                       maxElements,
-                                       isgpu,
-                                       validationStride);
-            }
-            break;
             case DataType::Int8x4:
             {
                 throw std::runtime_error("Unsupported validator data type Int8x4 for output.");
@@ -337,34 +326,10 @@ namespace Tensile
                     resPtr = result.bias;
                 }
                 break;
-                case ContractionProblemGemm::TENSOR::SCALEA:
+                case ContractionProblemGemm::TENSOR::SCALEDVEC:
                 {
-                    refPtr = reference.scaleA;
-                    resPtr = result.scaleA;
-                }
-                break;
-                case ContractionProblemGemm::TENSOR::SCALEB:
-                {
-                    refPtr = reference.scaleB;
-                    resPtr = result.scaleB;
-                }
-                break;
-                case ContractionProblemGemm::TENSOR::SCALEC:
-                {
-                    refPtr = reference.scaleC;
-                    resPtr = result.scaleC;
-                }
-                break;
-                case ContractionProblemGemm::TENSOR::SCALED:
-                {
-                    refPtr = reference.scaleD;
-                    resPtr = result.scaleD;
-                }
-                break;
-                case ContractionProblemGemm::TENSOR::SCALEALPHAVEC:
-                {
-                    refPtr = reference.scaleAlphaVec;
-                    resPtr = result.scaleAlphaVec;
+                    refPtr = reference.scaleDVec;
+                    resPtr = result.scaleDVec;
                 }
                 break;
                 default:
@@ -420,9 +385,6 @@ namespace Tensile
             if(m_printTensorRef)
                 requiredBufferSize
                     = std::max(requiredBufferSize, problem.d().totalAllocatedBytes());
-            if(m_printTensorBias)
-                requiredBufferSize
-                    = std::max(requiredBufferSize, problem.bias().totalAllocatedBytes());
 
             if(m_cpuResultBufferSize < requiredBufferSize)
                 allocateResultBuffer(requiredBufferSize);
@@ -505,19 +467,6 @@ namespace Tensile
             {
                 m_reporter->logTensor(
                     LogLevel::Verbose, "Ref", reference.d, problem.d(), reference.d);
-            }
-
-            if(m_printTensorBias)
-            {
-                HIP_CHECK_EXC(hipMemcpy(m_cpuResultBuffer.get(),
-                                        result.bias,
-                                        problem.bias().totalAllocatedBytes(),
-                                        hipMemcpyDeviceToHost));
-                m_reporter->logTensor(LogLevel::Verbose,
-                                      "bias",
-                                      m_cpuResultBuffer.get(),
-                                      problem.bias(),
-                                      result.bias);
             }
         }
 

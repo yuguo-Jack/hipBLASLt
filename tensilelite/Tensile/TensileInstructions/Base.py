@@ -29,7 +29,6 @@ from typing import Tuple
 import pickle
 import subprocess
 import threading
-from functools import lru_cache
 
 def fastdeepcopy(x):
     # Note: Some object can't be pickled
@@ -221,7 +220,6 @@ def _tryAssembler(isaVersion: Tuple[int, int, int], assemblerPath: str, asmStrin
 # Get Caps
 ########################################
 
-@lru_cache()
 def _initAsmCaps(isaVersion, assemblerPath, isDebug) -> dict:
     """ Determine assembler capabilities by testing short instructions sequences """
     rv = {}
@@ -236,16 +234,12 @@ def _initAsmCaps(isaVersion, assemblerPath, isDebug) -> dict:
     rv["HasSMulHi"]         = _tryAssembler(isaVersion, assemblerPath, "s_mul_hi_u32 s47, s36, s34", isDebug)
     rv["HasCodeObjectV3"]   = _tryAssembler(isaVersion, assemblerPath, "", isDebug, "-mcode-object-version=2")
 
-    rv["HasMFMA_explictB"]  = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x1_2b_f32 a[0:31], v0, v1, a[0:31]", isDebug)
-    rv["HasMFMA"]           = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x2bf16 a[0:31], v32, v33, a[0:31]", isDebug) or rv["HasMFMA_explictB"]
+    rv["HasMFMA"]           = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x2bf16 a[0:31], v32, v33, a[0:31]", isDebug) or _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x1_2b_f32 a[0:31], v0, v1, a[0:31]", isDebug)
     rv["HasMFMA_f64"]       = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f64_16x16x4f64 v[0:7], v[32:33], v[36:37], v[0:7]", isDebug) or _tryAssembler(isaVersion, assemblerPath, "v_mfma_f64_16x16x4_f64 v[0:7], v[32:33], v[36:37], v[0:7]", isDebug)
     rv["HasMFMA_bf16_1k"]   = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x4bf16_1k a[0:31], v[32:33], v[36:37], a[0:31]", isDebug)
-    rv["HasMFMA_f8"]        = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_16x16x32_fp8_fp8 a[0:3], v[2:3], v[4:5], a[0:3]", isDebug)
-    rv["HasMFMA_b8"]        = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_16x16x32_bf8_bf8 a[0:3], v[2:3], v[4:5], a[0:3]", isDebug)
 
     rv["HasMFMA_xf32"]      = _tryAssembler(isaVersion, assemblerPath, "v_mfma_f32_32x32x4_xf32 a[0:15], v[32:33], v[36:37], a[0:15]", isDebug)
     rv["HasSMFMA"]          = _tryAssembler(isaVersion, assemblerPath, "v_smfmac_f32_32x32x16_f16 a[0:15], v[32:33], v[36:39], v[40]", isDebug)
-    rv["HasWMMA"]           = _tryAssembler(isaVersion, assemblerPath,  "v_wmma_f32_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]", isDebug)
 
     rv["v_mac_f16"]         = _tryAssembler(isaVersion, assemblerPath, "v_mac_f16 v47, v36, v34", isDebug)
 
@@ -292,7 +286,6 @@ def _initAsmCaps(isaVersion, assemblerPath, isDebug) -> dict:
 
     return rv
 
-@lru_cache()
 def _initArchCaps(isaVersion) -> dict:
     rv = {}
     rv["HasEccHalf"]         = (isaVersion in [(9,0,6), (9,0,8), (9,0,10), (9,4,0), (9,4,1), (9,4,2)])
@@ -305,7 +298,6 @@ def _initArchCaps(isaVersion) -> dict:
     rv["ForceStoreSC1"] = (isaVersion in [(9,4,0), (9,4,1)])
     rv["TransOpWait"] = (isaVersion in [(9,4,0), (9,4,1), (9,4,2)])
     rv["SDWAWait"] = (isaVersion in [(9,4,0), (9,4,1), (9,4,2)])
-    rv["VgprBank"]           = (isaVersion[0] in (10, 11))
     return rv
 
 def _initAsmBugs(asmCaps) -> dict:

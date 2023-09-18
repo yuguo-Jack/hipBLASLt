@@ -25,12 +25,10 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 # This will add compile option: -std=c++17
-set(CMAKE_CXX_STANDARD 20 )
+set(CMAKE_CXX_STANDARD 17 )
 # Without this line, it will add -std=gnu++17 instead, which may have issues.
 set(CMAKE_CXX_EXTENSIONS OFF )
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-enable_testing()
 
 # Consider removing this in the future
 # This should appear before the project command, because it does not use FORCE
@@ -148,7 +146,7 @@ else()
 
     #Set the AMDGPU_TARGETS with backward compatiblity
     rocm_check_target_ids(DEFAULT_AMDGPU_TARGETS
-        TARGETS "gfx90a:xnack+;gfx90a:xnack-;gfx940;gfx941;gfx942"
+        TARGETS "gfx90a:xnack+;gfx90a:xnack-;gfx940:xnack+;gfx940:xnack-;gfx941:xnack+;gfx941:xnack-;gfx942:xnack+;gfx942:xnack-"
     )
 
     if (AMDGPU_TARGETS)
@@ -230,9 +228,9 @@ endif()
 find_package( hipblas REQUIRED CONFIG PATHS ${HIP_DIR} ${ROCM_PATH} /opt/rocm)
 
 # Setup version
-set(VERSION_STRING "0.6.0")
+set(VERSION_STRING "0.3.0")
 rocm_setup_version(VERSION ${VERSION_STRING})
-set(hipblaslt_SOVERSION 0.6)
+set(hipblaslt_SOVERSION 0.3)
 
 
 if( BUILD_CLIENTS_SAMPLES OR BUILD_CLIENTS_TESTS OR BUILD_CLIENTS_BENCHMARKS )
@@ -240,7 +238,7 @@ if( BUILD_CLIENTS_SAMPLES OR BUILD_CLIENTS_TESTS OR BUILD_CLIENTS_BENCHMARKS )
 endif()
 
 # FOR HANDLING ENABLE/DISABLE OPTIONAL BACKWARD COMPATIBILITY for FILE/FOLDER REORG
-option(BUILD_FILE_REORG_BACKWARD_COMPATIBILITY "Build with file/folder reorg with backward compatibility enabled" OFF)
+option(BUILD_FILE_REORG_BACKWARD_COMPATIBILITY "Build with file/folder reorg with backward compatibility enabled" ON)
 if(BUILD_FILE_REORG_BACKWARD_COMPATIBILITY)
   rocm_wrap_header_dir(
     ${CMAKE_SOURCE_DIR}/library/include

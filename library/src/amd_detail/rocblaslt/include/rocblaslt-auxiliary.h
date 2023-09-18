@@ -90,7 +90,7 @@ rocblaslt_status rocblaslt_destroy(const rocblaslt_handle handle);
  *  \retval rocblaslt_status_invalid_value
  */
 rocblaslt_status rocblaslt_matrix_layout_create(rocblaslt_matrix_layout* matDescr,
-                                                hipblasltDatatype_t      valueType,
+                                                hipblasDatatype_t        valueType,
                                                 uint64_t                 rows,
                                                 uint64_t                 cols,
                                                 int64_t                  ld);
@@ -144,7 +144,7 @@ rocblaslt_status rocblaslt_matrix_layout_get_attribute(rocblaslt_matrix_layout  
  */
 rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
                                               rocblaslt_compute_type computeType,
-                                              hipblasltDatatype_t    scaleType);
+                                              hipblasDatatype_t      scaleType);
 
 /*! \ingroup aux_module
  *  \brief Destroy a matrix multiplication descriptor
@@ -348,10 +348,10 @@ void rocblaslt_init_gemmData(rocblaslt_handle       handle,
                              rocblaslt::RocGemmType gemmType,
                              hipblasOperation_t     opA,
                              hipblasOperation_t     opB,
-                             hipblasltDatatype_t    typeA,
-                             hipblasltDatatype_t    typeB,
-                             hipblasltDatatype_t    typeC,
-                             hipblasltDatatype_t    typeD,
+                             hipblasDatatype_t      typeA,
+                             hipblasDatatype_t      typeB,
+                             hipblasDatatype_t      typeC,
+                             hipblasDatatype_t      typeD,
                              rocblaslt_compute_type typeCompute,
                              size_t                 maxWorkspaceBytes,
                              std::shared_ptr<void>& gemmData);
@@ -361,16 +361,11 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
     rocblaslt::RocGemmType                          typeGemm,
     hipblasOperation_t                              opA,
     hipblasOperation_t                              opB,
-    hipblasltDatatype_t                             typeA,
-    hipblasltDatatype_t                             typeB,
-    hipblasltDatatype_t                             typeC,
-    hipblasltDatatype_t                             typeD,
+    hipblasDatatype_t                               typeA,
+    hipblasDatatype_t                               typeB,
+    hipblasDatatype_t                               typeC,
+    hipblasDatatype_t                               typeD,
     rocblaslt_compute_type                          typeCompute,
-    std::vector<rocblaslt_matmul_heuristic_result>& heuristicResults);
-
-rocblaslt_status rocblaslt_matmul_get_algos_from_index_cpp(
-    rocblaslt_handle                                handle,
-    std::vector<int>&                               solutionIndex,
     std::vector<rocblaslt_matmul_heuristic_result>& heuristicResults);
 
 rocblaslt_status rocblaslt_is_algo_supported_cpp(rocblaslt_handle       handle,
@@ -389,11 +384,6 @@ rocblaslt_status
 
 // for internal use during testing, fetch arch name
 std::string rocblaslt_internal_get_arch_name();
-
-// for internal use of testing existence of path
-bool rocblaslt_internal_test_path(const std::string &);
-
-std::string rocblaslt_internal_get_so_path(const std::string &keyword);
 #endif
 
 #endif /* _ROCBLASLT_AUXILIARY_H_ */

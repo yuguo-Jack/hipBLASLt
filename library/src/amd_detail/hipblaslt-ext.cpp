@@ -94,7 +94,6 @@ namespace hipblaslt_ext
 
     hipblasStatus_t GemmInstance::initialize(const hipblasLtMatmulAlgo_t& algo,
                                              void*                        workspace,
-                                             bool                         useUserArgs,
                                              hipStream_t                  stream)
     try
     {
@@ -102,13 +101,8 @@ namespace hipblaslt_ext
             return HIPBLAS_STATUS_INVALID_VALUE;
         auto gemmType = static_cast<rocblaslt::RocGemmType>(m_gemm_type);
         auto rocalgo  = reinterpret_cast<const rocblaslt_matmul_algo*>(&algo);
-        return RocBlasLtStatusToHIPStatus(rocblaslt_makeArgument_cpp((rocblaslt_handle)m_handle,
-                                                                     gemmType,
-                                                                     *rocalgo,
-                                                                     workspace,
-                                                                     useUserArgs,
-                                                                     stream,
-                                                                     m_data));
+        return RocBlasLtStatusToHIPStatus(rocblaslt_makeArgument_cpp(
+            (rocblaslt_handle)m_handle, gemmType, *rocalgo, workspace, stream, m_data));
     }
     catch(...)
     {
@@ -132,10 +126,10 @@ namespace hipblaslt_ext
     Gemm::Gemm(hipblasLtHandle_t      handle,
                hipblasOperation_t     opA,
                hipblasOperation_t     opB,
-               hipblasltDatatype_t    typeA,
-               hipblasltDatatype_t    typeB,
-               hipblasltDatatype_t    typeC,
-               hipblasltDatatype_t    typeD,
+               hipblasDatatype_t      typeA,
+               hipblasDatatype_t      typeB,
+               hipblasDatatype_t      typeC,
+               hipblasDatatype_t      typeD,
                hipblasLtComputeType_t typeCompute)
         : GemmInstance(handle, GemmType::HIPBLASLT_GEMM)
     {
@@ -181,11 +175,6 @@ namespace hipblaslt_ext
                                      GemmEpilogue& epilogue,
                                      GemmInputs&   inputs)
     {
-        if(n == 0 || m == 0)
-        {
-            return HIPBLAS_STATUS_INVALID_VALUE;
-        }
-
         int lda     = m_problem_types[0].op_a == HIPBLAS_OP_N ? m : k;
         int ldb     = m_problem_types[0].op_b == HIPBLAS_OP_N ? k : n;
         int ldc     = m;
@@ -291,10 +280,10 @@ namespace hipblaslt_ext
     HIPBLASLT_EXPORT GroupedGemm::GroupedGemm(hipblasLtHandle_t      handle,
                                               hipblasOperation_t     opA,
                                               hipblasOperation_t     opB,
-                                              hipblasltDatatype_t    typeA,
-                                              hipblasltDatatype_t    typeB,
-                                              hipblasltDatatype_t    typeC,
-                                              hipblasltDatatype_t    typeD,
+                                              hipblasDatatype_t      typeA,
+                                              hipblasDatatype_t      typeB,
+                                              hipblasDatatype_t      typeC,
+                                              hipblasDatatype_t      typeD,
                                               hipblasLtComputeType_t typeCompute)
         : GemmInstance(handle, GemmType::HIPBLASLT_GROUPED_GEMM)
     {
@@ -314,12 +303,12 @@ namespace hipblaslt_ext
 
     HIPBLASLT_EXPORT GroupedGemm::GroupedGemm(hipblasLtHandle_t                     handle,
                                               std::vector<hipblasLtMatmulDesc_t>&   matmul_descr,
-                                              std::vector<void*>&                   alpha,
+                                              std::vector<float>&                   alpha,
                                               std::vector<void*>&                   A,
                                               std::vector<hipblasLtMatrixLayout_t>& matA,
                                               std::vector<void*>&                   B,
                                               std::vector<hipblasLtMatrixLayout_t>& matB,
-                                              std::vector<void*>&                   beta,
+                                              std::vector<float>&                   beta,
                                               std::vector<void*>&                   C,
                                               std::vector<hipblasLtMatrixLayout_t>& matC,
                                               std::vector<void*>&                   D,
@@ -423,12 +412,12 @@ namespace hipblaslt_ext
     }
 
     hipblasStatus_t GroupedGemm::setProblem(std::vector<hipblasLtMatmulDesc_t>&   matmul_descr,
-                                            std::vector<void*>&                   alpha,
+                                            std::vector<float>&                   alpha,
                                             std::vector<void*>&                   A,
                                             std::vector<hipblasLtMatrixLayout_t>& matA,
                                             std::vector<void*>&                   B,
                                             std::vector<hipblasLtMatrixLayout_t>& matB,
-                                            std::vector<void*>&                   beta,
+                                            std::vector<float>&                   beta,
                                             std::vector<void*>&                   C,
                                             std::vector<hipblasLtMatrixLayout_t>& matC,
                                             std::vector<void*>&                   D,
@@ -436,25 +425,29 @@ namespace hipblaslt_ext
     {
         auto matmul_descr_groupedGemm
             = reinterpret_cast<std::vector<rocblaslt_matmul_desc>*>(&matmul_descr);
-        auto matA_groupedGemm  = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matA);
-        auto matB_groupedGemm  = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matB);
-        auto matC_groupedGemm  = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matC);
-        auto matD_groupedGemm  = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matD);
-        auto A_groupedGemm     = reinterpret_cast<std::vector<const void*>*>(&A);
-        auto B_groupedGemm     = reinterpret_cast<std::vector<const void*>*>(&B);
-        auto C_groupedGemm     = reinterpret_cast<std::vector<const void*>*>(&C);
-        auto alpha_groupedGemm = reinterpret_cast<std::vector<const void*>*>(&alpha);
-        auto beta_groupedGemm  = reinterpret_cast<std::vector<const void*>*>(&beta);
+        auto matA_groupedGemm = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matA);
+        auto matB_groupedGemm = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matB);
+        auto matC_groupedGemm = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matC);
+        auto matD_groupedGemm = reinterpret_cast<std::vector<rocblaslt_matrix_layout>*>(&matD);
+        auto A_groupedGemm    = reinterpret_cast<std::vector<const void*>*>(&A);
+        auto B_groupedGemm    = reinterpret_cast<std::vector<const void*>*>(&B);
+        auto C_groupedGemm    = reinterpret_cast<std::vector<const void*>*>(&C);
+        std::vector<const void*> alpha_groupedGemm, beta_groupedGemm;
+        for(int i = 0; i < matmul_descr.size(); i++)
+        {
+            alpha_groupedGemm.push_back((const void*)(&(alpha[i])));
+            beta_groupedGemm.push_back((const void*)(&(beta[i])));
+        }
         auto rocproblemtypes
             = reinterpret_cast<std::vector<rocblaslt::RocGemmProblemType>*>(&m_problem_types);
         return RocBlasLtStatusToHIPStatus(
             rocblaslt_groupedgemm_create_cpp(*matmul_descr_groupedGemm,
-                                             *alpha_groupedGemm,
+                                             alpha_groupedGemm,
                                              *A_groupedGemm,
                                              *matA_groupedGemm,
                                              *B_groupedGemm,
                                              *matB_groupedGemm,
-                                             *beta_groupedGemm,
+                                             beta_groupedGemm,
                                              *C_groupedGemm,
                                              *matC_groupedGemm,
                                              D,
@@ -467,23 +460,6 @@ namespace hipblaslt_ext
     std::vector<GemmProblemType> GroupedGemm::getProblemTypes()
     {
         return m_problem_types;
-    }
-
-    HIPBLASLT_EXPORT hipblasStatus_t
-        GroupedGemm::getDefaultValueForDeviceUserArguments(void* hostDeviceUserArgs)
-    {
-        auto gemmType = static_cast<rocblaslt::RocGemmType>(m_gemm_type);
-        return RocBlasLtStatusToHIPStatus(rocblaslt_get_default_user_args(
-            (rocblaslt_handle)m_handle, gemmType, m_data, hostDeviceUserArgs));
-    }
-
-    HIPBLASLT_EXPORT hipblasStatus_t GroupedGemm::run(void* deviceUserArgs, hipStream_t stream)
-    {
-        if(m_gemm_count == 0)
-            return HIPBLAS_STATUS_INVALID_VALUE;
-        auto gemmType = static_cast<rocblaslt::RocGemmType>(m_gemm_type);
-        return RocBlasLtStatusToHIPStatus(rocblaslt_run_user_args_cpp(
-            (rocblaslt_handle)m_handle, gemmType, m_data, deviceUserArgs, stream));
     }
 
     hipblasStatus_t matmulIsAlgoSupported(hipblasLtHandle_t       handle,
@@ -530,10 +506,10 @@ namespace hipblaslt_ext
                                 GemmType                                       typeGemm,
                                 hipblasOperation_t                             opA,
                                 hipblasOperation_t                             opB,
-                                hipblasltDatatype_t                            typeA,
-                                hipblasltDatatype_t                            typeB,
-                                hipblasltDatatype_t                            typeC,
-                                hipblasltDatatype_t                            typeD,
+                                hipblasDatatype_t                              typeA,
+                                hipblasDatatype_t                              typeB,
+                                hipblasDatatype_t                              typeC,
+                                hipblasDatatype_t                              typeD,
                                 hipblasLtComputeType_t                         typeCompute,
                                 std::vector<hipblasLtMatmulHeuristicResult_t>& heuristicResults)
     try
@@ -557,27 +533,4 @@ namespace hipblaslt_ext
     {
         return exception_to_hipblas_status();
     }
-
-    int getIndexFromAlgo(hipblasLtMatmulAlgo_t& algo)
-    {
-        int* algo_ptr = (int*)algo.data;
-        if(*algo_ptr < 0)
-        {
-            return -1;
-        }
-        return *algo_ptr;
-    }
-
-    hipblasStatus_t
-        getAlgosFromIndex(hipblasLtHandle_t                              handle,
-                          std::vector<int>&                              algoIndex,
-                          std::vector<hipblasLtMatmulHeuristicResult_t>& heuristicResults)
-    {
-        auto results
-            = reinterpret_cast<std::vector<rocblaslt_matmul_heuristic_result>*>(&heuristicResults);
-        results->clear();
-        return RocBlasLtStatusToHIPStatus(rocblaslt_matmul_get_algos_from_index_cpp(
-            (rocblaslt_handle)handle, algoIndex, *results));
-    }
-
 } // End of namespace hipblasltext

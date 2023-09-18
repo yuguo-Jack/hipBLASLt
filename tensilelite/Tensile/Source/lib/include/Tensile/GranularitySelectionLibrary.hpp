@@ -79,10 +79,6 @@ namespace Tensile
                                                                Hardware const&  hardware,
                                                                const int index) const override
         {
-            if(index >= solutions.size())
-            {
-                return std::shared_ptr<MySolution>();
-            }
             return solutions.at(index);
         }
 
@@ -257,15 +253,7 @@ namespace Tensile
                     }
 
                     if(useSolution)
-                    {
-                        if((*row.second).requiredHostWorkspaceSizePerProblem
-                           == static_cast<size_t>(-1))
-                        {
-                            (*row.second).requiredHostWorkspaceSizePerProblem
-                                = (*row.second).requiredHostSizeGroupedGemmSingle(problems[0]);
-                        }
                         rv.insert(row.second);
-                    }
                 }
                 if(debug)
                 {

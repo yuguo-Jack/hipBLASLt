@@ -130,7 +130,7 @@ def writeBenchmarkFiles(stepBaseDir, solutions, problemSizes, \
     for solution in Utils.tqdm(solutions, "Finding unique solutions"):
         solutionKernels = solution.getKernels()
         for kernel in solutionKernels:
-            kName = Solution.getKeyNoInternalArgs(kernel)
+            kName = Solution.getNameFull(kernel)
             if kName not in kernelNames:
                 kernels.append(kernel)
                 kernelNames.add(kName)
@@ -327,7 +327,6 @@ def benchmarkProblemType(problemTypeConfig, problemSizeGroupConfig, problemSizeG
                 solution = solutions[i]
                 solution["SolutionIndex"] = i
                 solution["SolutionNameMin"] = Solution.getNameMin(solution, solutionMinNaming)
-                solution["KernelNameMin"]   = Solution.getNameMin(solution, solutionMinNaming, True)
         else:
             solutions = None
             print1("# Using cached solution data")

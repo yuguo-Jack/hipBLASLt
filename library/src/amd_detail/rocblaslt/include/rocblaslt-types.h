@@ -34,7 +34,6 @@
 
 #include <hip/hip_bfloat16.h>
 #include <hipblas/hipblas.h>
-#include <hipblaslt/hipblaslt.h>
 #include <memory>
 #include <stddef.h>
 #include <stdint.h>
@@ -130,19 +129,6 @@ typedef struct rocblaslt_half
     uint16_t data;
 } rocblaslt_half;
 #endif
-
-typedef struct
-{
-    uint8_t data;
-} rocblaslt_f8;
-
-typedef struct
-{
-    uint8_t data;
-} rocblaslt_bf8;
-
-typedef int8_t  rocblasltInt8;
-typedef int32_t rocblasltInt32;
 
 /*! \ingroup types_module
  *  \brief Specify the postprocessing options for the epilogue
@@ -249,10 +235,6 @@ typedef enum rocblaslt_compute_type_
 {
     rocblaslt_compute_f32           = 300, /**< 32-bit floating-point precision. */
     rocblaslt_compute_f32_fast_xf32 = 301, /**< XF32 compute for 32-bit input and output matrices */
-    rocblaslt_compute_f64           = 302, /**< 64-bit floating-point precision. */
-    rocblaslt_compute_i32           = 303, /**< 32-bit integer precision. */
-    rocblaslt_compute_f32_fast_f16
-    = 304, /**< F16 compute for 16-bit input and 32-bit output matrices */
 } rocblaslt_compute_type;
 
 /*! \ingroup types_module
@@ -269,27 +251,8 @@ typedef enum rocblaslt_matrix_layout_attribute_
     ROCBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET
     = 1, /**< stride between consecutive matrices in a batch expressed in terms
             of matrix elements. */
-    ROCBLASLT_MATRIX_LAYOUT_TYPE  = 2,
-    ROCBLASLT_MATRIX_LAYOUT_ORDER = 3,
-    ROCBLASLT_MATRIX_LAYOUT_ROWS  = 4,
-    ROCBLASLT_MATRIX_LAYOUT_COLS  = 5,
-    ROCBLASLT_MATRIX_LAYOUT_LD    = 6,
-    ROCBLASLT_MATRIX_LAYOUT_MAX   = 7
+    ROCBLASLT_MATRIX_LAYOUT_MAX = 2
 } rocblaslt_matrix_layout_attribute;
-
-typedef enum
-{
-    /** Column-major
-   *
-   * Leading dimension is the stride (in elements) to the beginning of next column in memory.
-   */
-    ROCBLASLT_ORDER_COL = 0,
-    /** Row major
-   *
-   * Leading dimension is the stride (in elements) to the beginning of next row in memory.
-   */
-    ROCBLASLT_ORDER_ROW = 1,
-} rocblasLtOrder_t;
 
 /*! \ingroup types_module
  *  \brief Specify the additional attributes of a matrix multiplication
@@ -302,21 +265,16 @@ typedef enum
  */
 typedef enum rocblaslt_matmul_desc_attributes_
 {
-    ROCBLASLT_MATMUL_DESC_TRANSA                     = 0,
-    ROCBLASLT_MATMUL_DESC_TRANSB                     = 1,
-    ROCBLASLT_MATMUL_DESC_EPILOGUE                   = 2,
-    ROCBLASLT_MATMUL_DESC_BIAS_POINTER               = 3,
-    ROCBLASLT_MATMUL_DESC_BIAS_DATA_TYPE             = 4,
-    ROCBLASLT_MATMUL_DESC_A_SCALE_POINTER            = 5,
-    ROCBLASLT_MATMUL_DESC_B_SCALE_POINTER            = 6,
-    ROCBLASLT_MATMUL_DESC_C_SCALE_POINTER            = 7,
-    ROCBLASLT_MATMUL_DESC_D_SCALE_POINTER            = 8,
-    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_SCALE_POINTER = 9,
-    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER       = 10,
-    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD            = 11,
-    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_BATCH_STRIDE  = 12,
-    ROCBLASLT_MATMUL_DESC_POINTER_MODE               = 13,
-    ROCBLASLT_MATMUL_DESC_MAX                        = 101
+    ROCBLASLT_MATMUL_DESC_TRANSA                    = 0,
+    ROCBLASLT_MATMUL_DESC_TRANSB                    = 1,
+    ROCBLASLT_MATMUL_DESC_EPILOGUE                  = 2,
+    ROCBLASLT_MATMUL_DESC_BIAS_POINTER              = 3,
+    ROCBLASLT_MATMUL_DESC_BIAS_DATA_TYPE            = 4,
+    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER      = 6,
+    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD           = 7,
+    ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_BATCH_STRIDE = 8,
+    ROCBLASLT_MATMUL_DESC_D_SCALE_VECTOR_POINTER    = 100,
+    ROCBLASLT_MATMUL_DESC_MAX                       = 101
 } rocblaslt_matmul_desc_attributes;
 
 /*! \ingroup types_module
@@ -363,14 +321,6 @@ typedef struct _rocblaslt_solutions
     rocblaslt_matmul_heuristic_result* heuristicResults;
     int                                algoCount;
 } rocblaslt_solutions;
-
-typedef struct _rocblaslt_matrix_transform_desc
-{
-    hipblasltDatatype_t    scaleType;
-    hipblasLtPointerMode_t pointerMode{HIPBLASLT_POINTER_MODE_HOST};
-    hipblasOperation_t     opA{HIPBLAS_OP_N};
-    hipblasOperation_t     opB{HIPBLAS_OP_N};
-} rocblaslt_matrix_transform_desc;
 #ifdef __cplusplus
 }
 #endif
@@ -389,19 +339,19 @@ namespace rocblaslt
     {
         hipblasOperation_t     op_a;
         hipblasOperation_t     op_b;
-        hipblasltDatatype_t    type_a;
-        hipblasltDatatype_t    type_b;
-        hipblasltDatatype_t    type_c;
-        hipblasltDatatype_t    type_d;
+        hipblasDatatype_t      type_a;
+        hipblasDatatype_t      type_b;
+        hipblasDatatype_t      type_c;
+        hipblasDatatype_t      type_d;
         rocblaslt_compute_type type_compute;
     };
 
     struct RocGemmEpilogue
     {
-        rocblaslt_epilogue  mode           = ROCBLASLT_EPILOGUE_DEFAULT;
-        hipblasltDatatype_t bias_data_type = static_cast<hipblasltDatatype_t>(0);
-        int                 aux_ld         = 0;
-        int                 aux_stride     = 0;
+        rocblaslt_epilogue mode           = ROCBLASLT_EPILOGUE_DEFAULT;
+        hipblasDatatype_t  bias_data_type = static_cast<hipblasDatatype_t>(0);
+        int                aux_ld         = 0;
+        int                aux_stride     = 0;
     };
 
     struct RocGemmInputs
@@ -413,14 +363,9 @@ namespace rocblaslt
         void* alpha = nullptr;
         void* beta  = nullptr;
         // Epilogue inputs
-        void* bias          = nullptr;
-        void* scaleA        = nullptr;
-        void* scaleB        = nullptr;
-        void* scaleC        = nullptr;
-        void* scaleD        = nullptr;
-        void* scaleE        = nullptr;
-        void* scaleAlphaVec = nullptr;
-        void* aux           = nullptr;
+        void* bias      = nullptr;
+        void* scaleDVec = nullptr;
+        void* aux       = nullptr;
     };
 
     class RocGemm

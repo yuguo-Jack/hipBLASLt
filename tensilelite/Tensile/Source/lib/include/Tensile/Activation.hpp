@@ -61,7 +61,6 @@ namespace Tensile
         Sigmoid,
         Tanh,
         DGelu,
-        Geluscaling,
         All,
         Exp, // Verification use only.
         Count

@@ -31,6 +31,7 @@ from . import Contractions
 from .SolutionStructs import Solution as OriginalSolution
 from .Utils import state
 
+
 class SingleSolutionLibrary:
     Tag = "Single"
 
@@ -423,7 +424,7 @@ class MasterSolutionLibrary:
 
     def state(self):
         rv = {
-            "solutions": state(self.solutions.values()),
+            "solutions": state(iter(list(self.solutions.values()))),
             "library": state(self.library)
         }
 
@@ -433,12 +434,14 @@ class MasterSolutionLibrary:
 
     def applyNaming(self, naming=None):
         if naming is None:
-            kernels = itertools.chain(s.originalSolution.getKernels() for s in self.solutions.values())
+            #allSolutions = itertools.chain(iter(list(self.solutions.values())), iter(list(self.sourceSolutions.values())))
+            kernels = list(
+                itertools.chain(*[s.originalSolution.getKernels()
+                                  for s in self.solutions.values()]))
             naming = OriginalSolution.getMinNaming(kernels)
 
         for s in list(self.solutions.values()):
             s.name = OriginalSolution.getNameMin(s.originalSolution.getKernels()[0], naming)
-            s.kernelName = OriginalSolution.getNameMin(s.originalSolution.getKernels()[0], naming, True)
 
     def remapSolutionIndicesStartingFrom(self, curIndex):
         reIndexMap = {}

@@ -2,7 +2,7 @@
  *
  * MIT License
  *
- * Copyright (C) 2022-2023 Advanced Micro Devices, Inc.
+ * Copyright (C) 2022 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,6 @@
 #ifndef _HIPBLASLT_TYPES_H_
 #define _HIPBLASLT_TYPES_H_
 
-#include "hipblaslt_float8.h"
 #include <float.h>
 
 // Generic API
@@ -55,9 +54,6 @@ typedef struct _hipblasLtHalf
 #endif
 
 typedef hip_bfloat16 hipblasLtBfloat16;
-
-typedef int8_t  hipblasLtInt8;
-typedef int32_t hipblasLtInt32;
 
 #ifdef __cplusplus
 }

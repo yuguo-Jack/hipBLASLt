@@ -26,8 +26,7 @@ options:
 	--ldd           ldd                     GEMM_STRIDED argument ldd
 	--trans_a       trans_a                 GEMM_STRIDED argument trans_a (N, T)
 	--trans_b       trans_b                 GEMM_STRIDED argument trans_b (N, T)
-	--in_datatype   datatype                GEMM_STRIDED argument in datatype:fp32,fp16,bf16
-	--out_datatype  datatype                GEMM_STRIDED argument out datatype:fp32,fp16,bf16
+	--datatype      datatype                GEMM_STRIDED argument in out datatype:fp32,fp16,bf16
 	--stride_a      stride_a                GEMM_STRIDED argument stride_a
 	--stride_b      stride_b                GEMM_STRIDED argument stride_b
 	--stride_c      stride_c                GEMM_STRIDED argument stride_c
@@ -39,6 +38,7 @@ options:
 	--grad          grad                    GEMM_STRIDED enable grad: 0 or 1 (default is 0)
 	--use_e         use_e                   GEMM_STRIDED enable use_e: 0 or 1 (default is 0)
 	--bias          bias                    GEMM_STRIDED enable bias and choose bias src: A, B, D
+	--scaleDVec     scaleDVec               GEMM_STRIDED enable scaleDVec: 0 or 1 (default is 0)
 	--header        header                  Print header for output (default is enabled)
 	--timing        timing                  Bechmark GPU kernel performance:0 or 1 (default is 1)
 	--bench_count   bench_count             Number of benchmark runs (default is 3)
@@ -50,13 +50,13 @@ options:
 Example 1:
 ./example_hipblaslt_preference --datatype fp16 --trans_a T --trans_b N -m 1024 -n 1024 -k 1024
 result:
-transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, activationType, us, tflops
+transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, scaleDVec, activationType, us, tflops
 TN, 1024, 1024, 1024, 1024, 1024, 1024, 1048576, 1048576, 1048576, 1, 2.00, 3.00, 0, 0, none, 92.333333, 23.257946
 
 Example 2: (run 10 solutions for single problem)
 ./example_hipblaslt_preference --datatype fp16 --trans_a T --trans_b N -m 1024 -n 1024 -k 1024 -s 10
 result:
-transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, activationType, us, tflops, best solution
+transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, scaleDVec, activationType, us, tflops, best solution
   Solution  0:    91.667 us,  23.427 Tflops *
   Solution  1:    46.000 us,  46.684 Tflops *
   Solution  2:    49.667 us,  43.238 Tflops
@@ -102,6 +102,7 @@ options:
         --beta                  beta            GEMM_STRIDED argument beta (default is 0)
         --act                   act             GEMM_STRIDED set activation type: relu, gelu, none (default is none)
         --bias                  bias            GEMM_STRIDED set bias: 0 or 1 (default is 0)
+        --scaleDVec             scaleDVec       GEMM_STRIDED enable scaleDVec: 0 or 1 (default is 0)
         --cpu_time              cpu_time        Bechmark timing using cpu time: 0 or 1 (default is 0)
         --all                   all             Get all solutions
 
@@ -155,13 +156,14 @@ options:
         --beta                  beta            GEMM_STRIDED argument beta (default is 0)
         --act                   act             GEMM_STRIDED set activation type: relu, gelu, none (default is none)
         --bias                  bias            GEMM_STRIDED set bias: 0 or 1 (default is 0)
+        --scaleDVec             scaleDVec       GEMM_STRIDED enable scaleDVec: 0 or 1 (default is 0)
         --cpu_time              cpu_time        Bechmark timing using cpu time: 0 or 1 (default is 0)
 
 example:
 ./example_hipblaslt_groupedgemm_get_all_algos --datatype fp16 --trans_a T --trans_b N -m 1024 -n 1024 -k 1024 -m 512 -n 512 -k 512 -m 2048 -n 1024 -k 512 --sync_count 10 --grouped_gemm 1
 
 result:
-index, transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, activationType
+index, transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, bias, scaleDVec, activationType
 0, TN, 1024, 1024, 1024, 1024, 1024, 1024, 1048576, 1048576, 1048576, 1, 1, 0, 0, 0, none
 1, TN, 512, 512, 512, 512, 512, 512, 262144, 262144, 262144, 1, 1, 0, 0, 0, none
 2, TN, 2048, 1024, 512, 512, 512, 2048, 1048576, 524288, 2097152, 1, 1, 0, 0, 0, none
@@ -404,47 +406,3 @@ Is supported 236 / Total solutions: 238
       Sol 235: Perf: 0.122144 ms, 37.360935 Tflops
 ```
 
-# Run gemm algo index sample test
-```
-./clients/staging/example_hipblaslt_algo_index
-Usage: ./example_hipblaslt_algo_index <options>
-options:
-	-h, --help				Show this help message
-	-v, --verbose				Verbose output
-	-V, --validate				Verify results
-	-m              m                       GEMM_STRIDED argument m
-	-n              n                       GEMM_STRIDED argument n
-	-k              k                       GEMM_STRIDED argument k
-	--lda           lda                     GEMM_STRIDED argument lda
-	--ldb           ldb                     GEMM_STRIDED argument ldb
-	--ldc           ldc                     GEMM_STRIDED argument ldc
-	--ldd           ldd                     GEMM_STRIDED argument ldd
-	--trans_a       trans_a                 GEMM_STRIDED argument trans_a (N, T)
-	--trans_b       trans_b                 GEMM_STRIDED argument trans_b (N, T)
-	--datatype      datatype                GEMM_STRIDED argument in out datatype:fp32,fp16,bf16
-	--stride_a      stride_a                GEMM_STRIDED argument stride_a
-	--stride_b      stride_b                GEMM_STRIDED argument stride_b
-	--stride_c      stride_c                GEMM_STRIDED argument stride_c
-	--stride_d      stride_d                GEMM_STRIDED argument stride_d
-	--alpha         alpha                   GEMM_STRIDED argument alpha
-	--beta          beta                    GEMM_STRIDED argument beta
-	--batch_count   batch                   GEMM_STRIDED argument batch count
-	--act           act                     GEMM_STRIDED set activation type: relu or gelu
-	--grad          grad                    GEMM_STRIDED enable grad: 0 or 1 (default is 0)
-	--use_e         use_e                   GEMM_STRIDED enable use_e: 0 or 1 (default is 0)
-	--bias          bias                    GEMM_STRIDED enable bias and choose bias src: A, B, D
-	--header        header                  Print header for output (default is enabled)
-	--timing        timing                  Bechmark GPU kernel performance:0 or 1 (default is 1)
-	--bench_count   bench_count             Number of benchmark runs (default is 3)
-	--sync_count    sync_count              Number of sync runs (default is 1)
-	--cold_iters    cold_iters              Cold Iterations to run before entering the timing loop (default is 0)
-
-Example:
-./example_hipblaslt_algo_index --datatype fp16 -m 128 -n 128 -k 16 --beta 1 --act relu --trans_a T -V
-result:
-transAB, M, N, K, lda, ldb, ldc, stride_a, stride_b, stride_c, batch_count, alpha, beta, use_e, bias, activationType, us, tflops
-gemm type gemm. problems: 1
-Algo index found: 1
-TN, 128, 128, 16, 16, 16, 128, 2048, 2048, 16384, 1, 2, 1, 0, none, 0, relu, 44.3333, 0.011826
-PASS
-```

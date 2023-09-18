@@ -25,7 +25,7 @@
 from ..Component import SumUnroll
 from ..Common import printExit
 from ..TensileInstructions import Module, VDot2F32F16, SMovB32, VAddU32, VCmpXEqU32, \
-    VLShiftLeftB32, VMovB32, VAddF32, SBarrier, SDWAModifiers, SelectBit, VCvtPkFP8toF32, VCvtPkBF8toF32, \
+    VLShiftLeftB32, VMovB32, VAddF32, SBarrier, \
     staticMultiply, vectorStaticDivide, vectorStaticRemainder, \
     DSModifiers, SSetMask, DSStoreB16, DSStoreB32, DSStoreB64, \
     RegSet, EXEC, vgpr, sgpr, RegisterPoolResource, log2
@@ -61,12 +61,13 @@ class SumUnrollMfma(SumUnroll):
     def loopSum(self, writer, kernel, tP, u, innerUnroll):
         tc   = tP["tensorChar"]
         imod = Module("SumUnroll%s_I%s" % (tc, innerUnroll))
+        assert (not kernel["DirectToVgpr%s"%tc])
 
-        m = (u) % (writer.states.numVgprBuffer) # local to use for MACs
+        m = (u) % (writer.states.numVgprBuffer+1) # local to use for MACs
 
         # calculate constant
         numRegistersIn   = kernel["ProblemType"]["DataType"].numRegisters()
-        numMIInput       = kernel["MIInputPerThread%s"%tc]
+        numMIInput       = kernel["MIInputPerThread"]
         vgprPerInput     = int(numMIInput * numRegistersIn)
 
         if tc == "A":
@@ -109,40 +110,6 @@ class SumUnrollMfma(SumUnroll):
                     while inputIdx < vgprPerInput:
                         imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), src1=vgpr(valuSumStr), comment="sum K"))
                         inputIdx += 1
-                elif (kernel["ProblemType"]["DataType"].isFloat8A() and tc == "A") or \
-                     (kernel["ProblemType"]["DataType"].isFloat8B() and tc == "B") :
-                    #FP8
-                    tmpVgpr = writer.vgprPool.checkOutAligned(4,2)
-                    if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
-                        for inputIdx in range(0, vgprPerInput):
-                            sdwa = SDWAModifiers(src0_sel=SelectBit.WORD_0)
-                            imod.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr,2), src=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), sdwa=sdwa, comment="convert to FP32"))
-                            sdwa = SDWAModifiers(src0_sel=SelectBit.WORD_1)
-                            imod.add(VCvtPkFP8toF32(dst=vgpr(tmpVgpr+2,2), src=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), sdwa=sdwa, comment="convert to FP32"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+1), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+2), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+3), src1=vgpr(valuSumStr), comment="sum K"))
-                    else:
-                        printExit("Currently unsupported vgprPerInput %u"%vgprPerInput)
-                    writer.vgprPool.checkIn(tmpVgpr)
-                elif (kernel["ProblemType"]["DataType"].isBFloat8A() and tc == "A") or \
-                     (kernel["ProblemType"]["DataType"].isBFloat8B() and tc == "B") :
-                    #BF8
-                    tmpVgpr = writer.vgprPool.checkOutAligned(4,2)
-                    if vgprPerInput > 1 and (vgprPerInput % 2 == 0):
-                        for inputIdx in range(0, vgprPerInput):
-                            sdwa = SDWAModifiers(src0_sel=SelectBit.WORD_0)
-                            imod.add(VCvtPkBF8toF32(dst=vgpr(tmpVgpr,2), src=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), sdwa=sdwa, comment="convert to FP32"))
-                            sdwa = SDWAModifiers(src0_sel=SelectBit.WORD_1)
-                            imod.add(VCvtPkBF8toF32(dst=vgpr(tmpVgpr+2,2), src=vgpr("%s+%s"%(valuStr, iui_new_offset + inputIdx)), sdwa=sdwa, comment="convert to FP32"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+1), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+2), src1=vgpr(valuSumStr), comment="sum K"))
-                            imod.add(VAddF32(dst=vgpr(valuSumStr), src0=vgpr(tmpVgpr+3), src1=vgpr(valuSumStr), comment="sum K"))
-                    else:
-                        printExit("Currently unsupported vgprPerInput %u"%vgprPerInput)
-                    writer.vgprPool.checkIn(tmpVgpr)
                 else:
                     printExit("Currently unsupported data type")
 
@@ -154,17 +121,19 @@ class SumUnrollMfma(SumUnroll):
     maxKId is calculated to find out the length of the sum index.
     """
     def storeSumLDS(self, writer, kernel, tP):
+        assert not kernel["allowLRVWforTLUandMI"]
         imod = Module("StoreSumLDS")
         # Unregister defined sgpr
         if kernel["ProblemType"]["DataType"].numRegisters() < 1:
             if kernel["ProblemType"]["DataType"].isHalf():
-                writer.undefineSgpr("SumUnrollConstOne")
+                imod.add(writer.undefineSgpr("SumUnrollConstOne"))
 
         # bias data type
         diasBpe        = kernel["ProblemType"]["ComputeDataType"].numBytes()
         # get constant parameter
         tile01         = tP["tile01Idx"]
         waveWidth      = writer.states.kernel["WavefrontSize"]
+        mt             = kernel["MacroTile%u" % tile01]
 
         wReg    = writer.vgprPool.checkOut(1,"wReg") # quotient
         tReg    = writer.vgprPool.checkOut(1,"tReg") # remainder
@@ -266,9 +235,9 @@ class SumUnrollMfma(SumUnroll):
         if kernel["LdsOffsetBias"] == 0:
           imod.add(SBarrier(comment="Wait for all wavefronts"))
 
-        MIWaveGroupShape = [ kernel["MatrixInstM"] * kernel["MatrixInstBM"] * kernel["MIWaveGroup"][0] * kernel["VectorWidthA"], \
-                            kernel["MatrixInstN"] * kernel["MatrixInstBN"] * kernel["MIWaveGroup"][1] * kernel["VectorWidthB"]]
-        numReadPerTileVector = vectorWidth
+        MIWaveGroupShape = [ kernel["MatrixInstM"] * kernel["MatrixInstBM"] * kernel["MIWaveGroup"][0] * vectorWidth, \
+                            kernel["MatrixInstN"] * kernel["MatrixInstBN"] * kernel["MIWaveGroup"][1] * 1]
+        numReadPerTileVector = vectorWidth if (tile01 == 0) else 1
         numVectorsPerTile    = kernel["MIWaveTile"][tile01] // numReadPerTileVector
         idx = 0
         for vIdx in range(0, numVectorsPerTile):

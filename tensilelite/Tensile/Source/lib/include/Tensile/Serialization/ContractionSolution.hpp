@@ -52,8 +52,7 @@ namespace Tensile
             using iot = IOTraits<IO>;
             static void mapping(IO& io, ContractionSolution& s)
             {
-                iot::mapRequired(io, "name", s.solutionName);
-                iot::mapRequired(io, "kernelName", s.kernelName);
+                iot::mapRequired(io, "name", s.kernelName);
                 iot::mapRequired(io, "index", s.index);
 
                 iot::mapRequired(io, "hardwarePredicate", s.hardwarePredicate);
@@ -99,8 +98,6 @@ namespace Tensile
                 iot::mapRequired(io, "workspaceSizePerElemBias", s.workspaceSizePerElemBias);
 
                 iot::mapOptional(io, "activationFused", s.activationFused);
-
-                iot::mapOptional(io, "CustomKernelName", s.customKernelName);
             }
 
             const static bool flow = false;
@@ -121,15 +118,12 @@ namespace Tensile
                 iot::mapRequired(io, "cType", s.cType);
                 iot::mapRequired(io, "dType", s.dType);
                 iot::mapOptional(io, "eType", s.eType);
-                iot::mapRequired(io, "computeInputType", s.computeInputType);
                 iot::mapRequired(io, "computeType", s.computeType);
                 iot::mapOptional(io, "useGradient", s.useGradient);
                 iot::mapRequired(io, "useBeta", s.useBeta);
                 iot::mapOptional(io, "useBias", s.useBias);
                 iot::mapOptional(io, "useE", s.useE);
-                iot::mapOptional(io, "useScaleAB", s.useScaleAB);
-                iot::mapOptional(io, "useScaleCD", s.useScaleCD);
-                iot::mapOptional(io, "useScaleAlphaVec", s.useScaleAlphaVec);
+                iot::mapOptional(io, "useScaleDVec", s.useScaleDVec);
                 iot::mapRequired(io, "highPrecisionAccumulate", s.highPrecisionAccumulate);
                 iot::mapOptional(io, "useInitialStridesAB", s.useInitialStridesAB);
                 iot::mapOptional(io, "useInitialStridesCD", s.useInitialStridesCD);
@@ -137,14 +131,12 @@ namespace Tensile
                 iot::mapOptional(io, "groupedGemm", s.groupedGemm);
                 iot::mapOptional(io, "fp16AltImpl", s.fp16AltImpl);
                 iot::mapOptional(io, "activationType", s.activationType);
-                iot::mapOptional(io, "activationArgLength", s.activationArgLength);
-                iot::mapOptional(io, "activationComputeDataType", s.activationComputeDataType);
+                iot::mapOptional(io, "activationHPA", s.activationHPA);
                 iot::mapOptional(io, "activationNoGuard", s.activationNoGuard);
                 iot::mapOptional(io, "biasSrcWhiteList", s.biasSrcWhiteList);
                 iot::mapOptional(io, "biasDataTypeWhiteList", s.biasDataTypeWhiteList);
                 iot::mapOptional(io, "sparseA", s.sparseA);
                 iot::mapOptional(io, "f32XdlMathOp", s.f32XdlMathOp);
-                iot::mapOptional(io, "supportDeviceUserArguments", s.supportDeviceUserArguments);
             }
 
             const static bool flow = false;

@@ -27,147 +27,13 @@
 #include "definitions.h"
 #include "handle.h"
 #include "rocblaslt.h"
-#include "rocblaslt_mat_utils.hpp"
 #include "tensile_host.hpp"
 #include "utility.hpp"
 
-#ifndef WIN32
-#include <link.h>
-#endif
-
-#include <unistd.h>
 #include <hip/hip_runtime_api.h>
-#include <utility>
 
 #define TO_STR2(x) #x
 #define TO_STR(x) TO_STR2(x)
-
-/******************************************************************************
- * construct_rocblaslt_problem creates RocblasltContractionProblem from mat    *
- * layout and descriptor for Tensile's findTopSolutions.                      *
- ******************************************************************************/
-template <typename TiA, typename TiB, typename To, typename Tc>
-RocblasltContractionProblem<TiA, TiB, To, Tc>
-    construct_rocblaslt_problem(const rocblaslt_matmul_desc matmul_descr,
-                                rocblaslt_matrix_layout     matA,
-                                rocblaslt_matrix_layout     matB,
-                                rocblaslt_matrix_layout     matC,
-                                rocblaslt_matrix_layout     matD,
-                                const Tc*                   alpha,
-                                const Tc*                   beta,
-                                size_t                      maxWorkSpaceBytes)
-{
-    int8_t      dummy;
-    const void* dummy_ptr = &dummy;
-    int64_t     m, n, k, lda, ldb, ldc, ldd, lde, batch_stride_a, batch_stride_b, batch_stride_c,
-        batch_stride_d, batch_stride_e;
-    hipblasltDatatype_t    bias_type;
-    rocblaslt_compute_type compute_type;
-    void *                 bias = nullptr, *scaleAlphaVec = nullptr, *e = nullptr;
-    bool                   gradient = false;
-    rocblaslt_status       isValid  = rocblaslt_matmul_valid_args(matmul_descr,
-                                                           dummy_ptr,
-                                                           dummy_ptr,
-                                                           dummy_ptr,
-                                                           dummy_ptr,
-                                                           matA,
-                                                           matB,
-                                                           matC,
-                                                           matD,
-                                                           alpha,
-                                                           beta,
-                                                           m,
-                                                           n,
-                                                           k,
-                                                           lda,
-                                                           batch_stride_a,
-                                                           ldb,
-                                                           batch_stride_b,
-                                                           ldc,
-                                                           batch_stride_c,
-                                                           ldd,
-                                                           batch_stride_d,
-                                                           lde,
-                                                           batch_stride_e,
-                                                           bias,
-                                                           bias_type,
-                                                           scaleAlphaVec,
-                                                           e,
-                                                           gradient,
-                                                           compute_type);
-    if(isValid != rocblaslt_status_continue)
-    {
-        m = 0;
-        n = 0;
-        k = 0;
-    }
-
-    // Internal assign
-    hipblasOperation_t opA           = matmul_descr->op_A;
-    hipblasOperation_t opB           = matmul_descr->op_B;
-    int                num_batches_a = matA->batch_count;
-    rocblaslt_epilogue epilogue      = matmul_descr->epilogue;
-    void*              scaleA        = matmul_descr->scaleA;
-    void*              scaleB        = matmul_descr->scaleB;
-    void*              scaleC        = matmul_descr->scaleC;
-    void*              scaleD        = matmul_descr->scaleD;
-    void*              scaleE        = matmul_descr->scaleE;
-
-    // Others
-    constexpr bool strided_batch = true;
-    constexpr bool grouped_gemm  = false;
-
-    Tc alpha_1 = 1.0; // use dScaleAlphaVec instead, original alpha => 1.0
-    if(scaleAlphaVec)
-        alpha = &alpha_1;
-
-    RocblasltContractionProblem<TiA, TiB, To, Tc> problem{opA,
-                                                          opB,
-                                                          m,
-                                                          n,
-                                                          k,
-                                                          alpha,
-                                                          nullptr,
-                                                          nullptr,
-                                                          lda,
-                                                          batch_stride_a,
-                                                          nullptr,
-                                                          nullptr,
-                                                          ldb,
-                                                          batch_stride_b,
-                                                          beta,
-                                                          nullptr,
-                                                          nullptr,
-                                                          ldc,
-                                                          batch_stride_c,
-                                                          nullptr,
-                                                          nullptr,
-                                                          ldd,
-                                                          batch_stride_d,
-                                                          (Tc*)e,
-                                                          nullptr,
-                                                          lde,
-                                                          batch_stride_e,
-                                                          num_batches_a,
-                                                          strided_batch,
-                                                          grouped_gemm,
-                                                          gradient,
-                                                          compute_type,
-                                                          bias,
-                                                          (const Tc*)scaleA,
-                                                          (const Tc*)scaleB,
-                                                          (const Tc*)scaleC,
-                                                          (const Tc*)scaleD,
-                                                          (const Tc*)scaleE,
-                                                          (const Tc*)scaleAlphaVec,
-                                                          bias_type,
-                                                          epilogue,
-                                                          nullptr,
-                                                          maxWorkSpaceBytes,
-                                                          nullptr};
-
-    return problem;
-}
 
 #ifdef __cplusplus
 extern "C" {
@@ -236,7 +102,7 @@ rocblaslt_status rocblaslt_destroy(const rocblaslt_handle handle)
  * It should be destroyed at the end using rocblaslt_matrix_layout_destory().
  *******************************************************************************/
 rocblaslt_status rocblaslt_matrix_layout_create(rocblaslt_matrix_layout* matDescr,
-                                                hipblasltDatatype_t      valueType,
+                                                hipblasDatatype_t        valueType,
                                                 uint64_t                 rows,
                                                 uint64_t                 cols,
                                                 int64_t                  ld)
@@ -262,7 +128,7 @@ rocblaslt_status rocblaslt_matrix_layout_create(rocblaslt_matrix_layout* matDesc
                     "matLayout[out]",
                     matDescr,
                     "type",
-                    hipblasltDatatype_to_string(valueType),
+                    hipblasDatatype_to_string(valueType),
                     "rows",
                     rows,
                     "cols",
@@ -345,51 +211,6 @@ rocblaslt_status rocblaslt_matrix_layout_set_attribute(rocblaslt_matrix_layout  
             case ROCBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET:
                 if(sizeof(int64_t) <= sizeInBytes)
                     memcpy(&matLayout->batch_stride, buf, sizeof(int64_t));
-                else
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATRIX_LAYOUT_TYPE:
-                if(sizeof(uint32_t) <= sizeInBytes)
-                    memcpy(&matLayout->type, buf, sizeof(uint32_t));
-                else
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATRIX_LAYOUT_ORDER:
-                if(sizeof(int32_t) <= sizeInBytes)
-                    memcpy(&matLayout->order, buf, sizeof(int32_t));
-                else
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATRIX_LAYOUT_ROWS:
-                if(sizeof(uint64_t) <= sizeInBytes)
-                    memcpy(&matLayout->m, buf, sizeof(uint64_t));
-                else
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATRIX_LAYOUT_COLS:
-                if(sizeof(uint64_t) <= sizeInBytes)
-                    memcpy(&matLayout->n, buf, sizeof(uint64_t));
-                else
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATRIX_LAYOUT_LD:
-                if(sizeof(int64_t) <= sizeInBytes)
-                    memcpy(&matLayout->ld, buf, sizeof(int64_t));
                 else
                 {
                     log_error(__func__, "invalid buf size", sizeInBytes);
@@ -494,7 +315,7 @@ rocblaslt_status rocblaslt_matrix_layout_get_attribute(rocblaslt_matrix_layout  
  *******************************************************************************/
 rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
                                               rocblaslt_compute_type computeType,
-                                              hipblasltDatatype_t    scaleType)
+                                              hipblasDatatype_t      scaleType)
 {
     // Check if matmulDesc is valid
     if(matmulDesc == nullptr)
@@ -512,17 +333,13 @@ rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
             {
             case rocblaslt_compute_f32:
             case rocblaslt_compute_f32_fast_xf32:
-            case rocblaslt_compute_f64:
-            case rocblaslt_compute_i32:
-            case rocblaslt_compute_f32_fast_f16:
                 break;
             default:
                 log_error(__func__, "invalid compute type", computeType);
                 throw rocblaslt_status_invalid_value;
             }
 
-            if(scaleType != HIPBLASLT_R_32F && scaleType != HIPBLASLT_R_64F
-               && scaleType != HIPBLASLT_R_32I)
+            if(scaleType != HIPBLAS_R_32F)
             {
                 log_error(__func__, "invalid scale type", scaleType);
                 throw rocblaslt_status_invalid_value;
@@ -531,34 +348,24 @@ rocblaslt_status rocblaslt_matmul_desc_create(rocblaslt_matmul_desc* matmulDesc,
             *matmulDesc                 = new _rocblaslt_matmul_desc();
             (*matmulDesc)->compute_type = computeType;
             (*matmulDesc)->scale_type   = scaleType;
-            auto computeTypeInit        = computeType == rocblaslt_compute_f32_fast_xf32
-                                              ? rocblaslt_compute_f32
-                                              : computeType;
-            auto dataType               = HIPBLASLT_R_32F;
-            if(computeTypeInit == rocblaslt_compute_f64)
-                dataType = HIPBLASLT_R_64F;
-            else if(computeType == rocblaslt_compute_i32)
-                dataType = HIPBLASLT_R_32I;
-
             initTensileGemmData(nullptr,
                                 rocblaslt::RocGemmType::ROCBLASLT_GEMM,
                                 HIPBLAS_OP_N,
                                 HIPBLAS_OP_N,
-                                dataType,
-                                dataType,
-                                dataType,
-                                dataType,
-                                computeTypeInit,
+                                HIPBLAS_R_32F,
+                                HIPBLAS_R_32F,
+                                HIPBLAS_R_32F,
+                                HIPBLAS_R_32F,
+                                rocblaslt_compute_f32,
                                 0,
                                 (*matmulDesc)->m_data);
-
             log_api(__func__,
                     "matmulDesc[out]",
                     matmulDesc,
                     "computeType",
                     rocblaslt_compute_type_to_string(computeType),
                     "scaleType",
-                    hipblasltDatatype_to_string(scaleType));
+                    hipblasDatatype_to_string(scaleType));
         }
         catch(const rocblaslt_status& status)
         {
@@ -661,57 +468,12 @@ rocblaslt_status rocblaslt_matmul_desc_set_attribute(rocblaslt_matmul_desc      
                     return rocblaslt_status_invalid_value;
                 }
                 break;
-            case ROCBLASLT_MATMUL_DESC_A_SCALE_POINTER:
+            case ROCBLASLT_MATMUL_DESC_D_SCALE_VECTOR_POINTER:
                 if(sizeof(void*) <= sizeInBytes)
-                    memcpy(&matmulDesc->scaleA, buf, sizeof(void*));
+                    memcpy(&matmulDesc->scaleDVec, buf, sizeof(void*));
                 else
                 {
-                    log_error(__func__, "invalid scaleA buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATMUL_DESC_B_SCALE_POINTER:
-                if(sizeof(void*) <= sizeInBytes)
-                    memcpy(&matmulDesc->scaleB, buf, sizeof(void*));
-                else
-                {
-                    log_error(__func__, "invalid scaleB buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATMUL_DESC_C_SCALE_POINTER:
-                if(sizeof(void*) <= sizeInBytes)
-                    memcpy(&matmulDesc->scaleC, buf, sizeof(void*));
-                else
-                {
-                    log_error(__func__, "invalid scaleC buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATMUL_DESC_D_SCALE_POINTER:
-                if(sizeof(void*) <= sizeInBytes)
-                    memcpy(&matmulDesc->scaleD, buf, sizeof(void*));
-                else
-                {
-                    log_error(__func__, "invalid scaleD buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATMUL_DESC_EPILOGUE_AUX_SCALE_POINTER:
-                if(sizeof(void*) <= sizeInBytes)
-                    memcpy(&matmulDesc->scaleE, buf, sizeof(void*));
-                else
-                {
-                    log_error(__func__, "invalid scaleAux buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                break;
-            case ROCBLASLT_MATMUL_DESC_POINTER_MODE:
-                if(sizeof(int32_t) <= sizeInBytes)
-                    memcpy(&matmulDesc->pointermode, buf, sizeof(int32_t));
-                else
-                {
-                    log_error(__func__, "invalid pointermode buf size", sizeInBytes);
+                    log_error(__func__, "invalid scaleDVec buf size", sizeInBytes);
                     return rocblaslt_status_invalid_value;
                 }
                 break;
@@ -839,32 +601,14 @@ rocblaslt_status rocblaslt_matmul_desc_get_attribute(rocblaslt_matmul_desc      
                 }
                 memcpy(buf, &matmulDesc->bias, sizeof(void*));
                 break;
-            case ROCBLASLT_MATMUL_DESC_A_SCALE_POINTER:
+            case ROCBLASLT_MATMUL_DESC_D_SCALE_VECTOR_POINTER:
                 *sizeWritten = sizeof(void*);
                 if(sizeInBytes < sizeof(void*))
                 {
                     log_error(__func__, "invalid buf size", sizeInBytes);
                     return rocblaslt_status_invalid_value;
                 }
-                memcpy(buf, &matmulDesc->scaleA, sizeof(void*));
-                break;
-            case ROCBLASLT_MATMUL_DESC_B_SCALE_POINTER:
-                *sizeWritten = sizeof(void*);
-                if(sizeInBytes < sizeof(void*))
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                memcpy(buf, &matmulDesc->scaleB, sizeof(void*));
-                break;
-            case ROCBLASLT_MATMUL_DESC_POINTER_MODE:
-                *sizeWritten = sizeof(int32_t);
-                if(sizeInBytes < sizeof(int32_t))
-                {
-                    log_error(__func__, "invalid buf size", sizeInBytes);
-                    return rocblaslt_status_invalid_value;
-                }
-                memcpy(buf, &matmulDesc->pointermode, sizeof(void*));
+                memcpy(buf, &matmulDesc->scaleDVec, sizeof(void*));
                 break;
             case ROCBLASLT_MATMUL_DESC_BIAS_DATA_TYPE:
                 *sizeWritten = sizeof(int32_t);
@@ -1105,22 +849,44 @@ rocblaslt_status rocblaslt_matmul_is_algo_supported(rocblaslt_handle        hand
     rocblaslt_status status = rocblaslt_status_success;
     try
     {
-        hipblasltDatatype_t    a_type       = matA->type;
-        hipblasltDatatype_t    b_type       = matB->type;
-        hipblasltDatatype_t    c_type       = matC->type;
-        hipblasltDatatype_t    d_type       = matD->type;
+        hipblasDatatype_t      a_type       = matA->type;
+        hipblasDatatype_t      b_type       = matB->type;
+        hipblasDatatype_t      c_type       = matC->type;
+        hipblasDatatype_t      d_type       = matD->type;
         rocblaslt_compute_type compute_type = matmul_descr->compute_type;
         auto&                  gemmData     = matmul_descr->m_data;
-        if(a_type == HIPBLASLT_R_32F && b_type == HIPBLASLT_R_32F)
+        if(a_type == HIPBLAS_R_32F && b_type == HIPBLAS_R_32F)
         {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
+            if(c_type == HIPBLAS_R_32F && d_type == HIPBLAS_R_32F)
             {
                 if(compute_type == rocblaslt_compute_f32
                    || compute_type == rocblaslt_compute_f32_fast_xf32)
                 {
                     float* alphaf = (float*)alpha;
                     float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<float, float, float, float>(
+                    auto   prob
+                        = ConstructRocblasltProblem<float, float, float>(matmul_descr,
+                                                                         matA,
+                                                                         matB,
+                                                                         matC,
+                                                                         matD,
+                                                                         alphaf,
+                                                                         betaf,
+                                                                         algo->max_workspace_bytes);
+                    status = isSolutionSupported<float, float, float>(
+                        handle, prob, gemmData, algo, workspaceSizeInBytes);
+                }
+            }
+        }
+        else if(a_type == HIPBLAS_R_16F && b_type == HIPBLAS_R_16F)
+        {
+            if(c_type == HIPBLAS_R_16F && d_type == HIPBLAS_R_16F)
+            {
+                if(compute_type == rocblaslt_compute_f32)
+                {
+                    float* alphaf = (float*)alpha;
+                    float* betaf  = (float*)beta;
+                    auto   prob = ConstructRocblasltProblem<rocblaslt_half, rocblaslt_half, float>(
                         matmul_descr,
                         matA,
                         matB,
@@ -1129,45 +895,21 @@ rocblaslt_status rocblaslt_matmul_is_algo_supported(rocblaslt_handle        hand
                         alphaf,
                         betaf,
                         algo->max_workspace_bytes);
-                    status = isSolutionSupported<float, float, float, float>(
+                    status = isSolutionSupported<rocblaslt_half, rocblaslt_half, float>(
                         handle, prob, gemmData, algo, workspaceSizeInBytes);
                 }
             }
         }
-        else if(a_type == HIPBLASLT_R_16F && b_type == HIPBLASLT_R_16F)
+        else if(a_type == HIPBLAS_R_16B && b_type == HIPBLAS_R_16B)
         {
-            if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status        = isSolutionSupported<rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
+            if(c_type == HIPBLAS_R_16B && d_type == HIPBLAS_R_16B)
             {
                 if(compute_type == rocblaslt_compute_f32)
                 {
                     float* alphaf = (float*)alpha;
                     float* betaf  = (float*)beta;
                     auto   prob
-                        = construct_rocblaslt_problem<rocblaslt_half, rocblaslt_half, float, float>(
+                        = ConstructRocblasltProblem<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                             matmul_descr,
                             matA,
                             matB,
@@ -1176,359 +918,13 @@ rocblaslt_status rocblaslt_matmul_is_algo_supported(rocblaslt_handle        hand
                             alphaf,
                             betaf,
                             algo->max_workspace_bytes);
-                    status = isSolutionSupported<rocblaslt_half, rocblaslt_half, float, float>(
+                    status = isSolutionSupported<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                         handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_16B && b_type == HIPBLASLT_R_16B)
-        {
-            if(c_type == HIPBLASLT_R_16B && d_type == HIPBLASLT_R_16B)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status        = isSolutionSupported<rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_8F_E4M3)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_f8, float, float>(
-                            matmul_descr,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            alphaf,
-                            betaf,
-                            algo->max_workspace_bytes);
-                    status = isSolutionSupported<rocblaslt_f8, rocblaslt_f8, float, float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status = isSolutionSupported<rocblaslt_f8, rocblaslt_f8, rocblaslt_half, float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_8F_E5M2)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                            matmul_descr,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            alphaf,
-                            betaf,
-                            algo->max_workspace_bytes);
-                    status = isSolutionSupported<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_bf8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_f8, rocblaslt_bf8, rocblaslt_half, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E5M2 && b_type == HIPBLASLT_R_8F_E4M3)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob
-                        = construct_rocblaslt_problem<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                            matmul_descr,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            alphaf,
-                            betaf,
-                            algo->max_workspace_bytes);
-                    status = isSolutionSupported<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_bf8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_bf8, rocblaslt_f8, rocblaslt_half, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8I && b_type == HIPBLASLT_R_8I) //INT8
-        {
-            if(c_type == HIPBLASLT_R_8I && d_type == HIPBLASLT_R_8I)
-            {
-                if(compute_type == rocblaslt_compute_i32)
-                {
-                    int32_t* alphaf = (int32_t*)alpha;
-                    int32_t* betaf  = (int32_t*)beta;
-                    auto     prob   = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t>(matmul_descr,
-                                                                     matA,
-                                                                     matB,
-                                                                     matC,
-                                                                     matD,
-                                                                     alphaf,
-                                                                     betaf,
-                                                                     algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<hipblasLtInt8, hipblasLtInt8, hipblasLtInt8, int32_t>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32I && d_type == HIPBLASLT_R_32I)
-            {
-                if(compute_type == rocblaslt_compute_i32)
-                {
-                    int32_t* alphaf = (int32_t*)alpha;
-                    int32_t* betaf  = (int32_t*)beta;
-                    auto     prob   = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t,
-                                                            int32_t>(matmul_descr,
-                                                                     matA,
-                                                                     matB,
-                                                                     matC,
-                                                                     matD,
-                                                                     alphaf,
-                                                                     betaf,
-                                                                     algo->max_workspace_bytes);
-                    status = isSolutionSupported<hipblasLtInt8, hipblasLtInt8, int32_t, int32_t>(
-                        handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_16F && b_type == HIPBLASLT_R_8F_E4M3) // mix types
-        {
-            if(c_type == HIPBLASLT_R_8F_E4M3 && d_type == HIPBLASLT_R_8F_E4M3)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_f8,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_half, rocblaslt_f8, rocblaslt_f8, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_half, rocblaslt_f8, rocblaslt_half, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            float,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_half, rocblaslt_f8, float, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_16F) // mix types
-        {
-            if(c_type == HIPBLASLT_R_8F_E4M3 && d_type == HIPBLASLT_R_8F_E4M3)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_f8, rocblaslt_half, rocblaslt_f8, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_f8, rocblaslt_half, rocblaslt_half, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float* alphaf = (float*)alpha;
-                    float* betaf  = (float*)beta;
-                    auto   prob   = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float,
-                                                            float>(matmul_descr,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   alphaf,
-                                                                   betaf,
-                                                                   algo->max_workspace_bytes);
-                    status
-                        = isSolutionSupported<rocblaslt_f8, rocblaslt_half, float, float>(
-                            handle, prob, gemmData, algo, workspaceSizeInBytes);
                 }
             }
         }
         else
         {
-            log_error(__func__, "No such template.");
             status = rocblaslt_status_not_implemented;
         }
 
@@ -1575,22 +971,49 @@ rocblaslt_status
     rocblaslt_status status = rocblaslt_status_success;
     try
     {
-        hipblasltDatatype_t    a_type       = matA->type;
-        hipblasltDatatype_t    b_type       = matB->type;
-        hipblasltDatatype_t    c_type       = matC->type;
-        hipblasltDatatype_t    d_type       = matD->type;
+        hipblasDatatype_t      a_type       = matA->type;
+        hipblasDatatype_t      b_type       = matB->type;
+        hipblasDatatype_t      c_type       = matC->type;
+        hipblasDatatype_t      d_type       = matD->type;
         rocblaslt_compute_type compute_type = matmul_desc->compute_type;
         auto&                  tensile_data = matmul_desc->m_data;
-        if(a_type == HIPBLASLT_R_32F && b_type == HIPBLASLT_R_32F)
+        if(a_type == HIPBLAS_R_32F && b_type == HIPBLAS_R_32F)
         {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
+            if(c_type == HIPBLAS_R_32F && d_type == HIPBLAS_R_32F)
             {
                 if(compute_type == rocblaslt_compute_f32
                    || compute_type == rocblaslt_compute_f32_fast_xf32)
                 {
                     float alpha = 1.0;
                     float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<float, float, float, float>(
+                    auto  prob
+                        = ConstructRocblasltProblem<float, float, float>(matmul_desc,
+                                                                         matA,
+                                                                         matB,
+                                                                         matC,
+                                                                         matD,
+                                                                         &alpha,
+                                                                         &beta,
+                                                                         pref->max_workspace_bytes);
+                    status = getBestSolutions<float, float, float>(prob,
+                                                                   handle,
+                                                                   tensile_data,
+                                                                   requestedAlgoCount,
+                                                                   heuristicResultsArray,
+                                                                   returnAlgoCount,
+                                                                   pref->max_workspace_bytes);
+                }
+            }
+        }
+        else if(a_type == HIPBLAS_R_16F && b_type == HIPBLAS_R_16F)
+        {
+            if(c_type == HIPBLAS_R_16F && d_type == HIPBLAS_R_16F)
+            {
+                if(compute_type == rocblaslt_compute_f32)
+                {
+                    float alpha = 1.0;
+                    float beta  = 1.0;
+                    auto  prob  = ConstructRocblasltProblem<rocblaslt_half, rocblaslt_half, float>(
                         matmul_desc,
                         matA,
                         matB,
@@ -1599,55 +1022,27 @@ rocblaslt_status
                         &alpha,
                         &beta,
                         pref->max_workspace_bytes);
-                    status
-                        = getBestSolutions<float, float, float, float>(prob,
-                                                                       handle,
-                                                                       tensile_data,
-                                                                       requestedAlgoCount,
-                                                                       heuristicResultsArray,
-                                                                       returnAlgoCount,
-                                                                       pref->max_workspace_bytes);
+                    status = getBestSolutions<rocblaslt_half, rocblaslt_half, float>(
+                        prob,
+                        handle,
+                        tensile_data,
+                        requestedAlgoCount,
+                        heuristicResultsArray,
+                        returnAlgoCount,
+                        pref->max_workspace_bytes);
                 }
             }
         }
-        else if(a_type == HIPBLASLT_R_16F && b_type == HIPBLASLT_R_16F)
+        else if(a_type == HIPBLAS_R_16B && b_type == HIPBLAS_R_16B)
         {
-            if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status
-                        = getBestSolutions<rocblaslt_half, rocblaslt_half, rocblaslt_half, float>(
-                            prob,
-                            handle,
-                            tensile_data,
-                            requestedAlgoCount,
-                            heuristicResultsArray,
-                            returnAlgoCount,
-                            pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
+            if(c_type == HIPBLAS_R_16B && d_type == HIPBLAS_R_16B)
             {
                 if(compute_type == rocblaslt_compute_f32)
                 {
                     float alpha = 1.0;
                     float beta  = 1.0;
                     auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_half, rocblaslt_half, float, float>(
+                        = ConstructRocblasltProblem<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                             matmul_desc,
                             matA,
                             matB,
@@ -1656,487 +1051,7 @@ rocblaslt_status
                             &alpha,
                             &beta,
                             pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_half, rocblaslt_half, float, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_16B && b_type == HIPBLASLT_R_16B)
-        {
-            if(c_type == HIPBLASLT_R_16B && d_type == HIPBLASLT_R_16B)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status      = getBestSolutions<rocblaslt_bfloat16,
-                                              rocblaslt_bfloat16,
-                                              rocblaslt_bfloat16,
-                                              float>(prob,
-                                                     handle,
-                                                     tensile_data,
-                                                     requestedAlgoCount,
-                                                     heuristicResultsArray,
-                                                     returnAlgoCount,
-                                                     pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_8F_E4M3)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_f8, float, float>(
-                            matmul_desc,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            &alpha,
-                            &beta,
-                            pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_f8, float, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_f8, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_8F_E5M2)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                            matmul_desc,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            &alpha,
-                            &beta,
-                            pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_bf8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_bf8, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_64F && b_type == HIPBLASLT_R_64F)
-        {
-            if(c_type == HIPBLASLT_R_64F && d_type == HIPBLASLT_R_64F)
-            {
-                if(compute_type == rocblaslt_compute_f64)
-                {
-                    double alpha = 1.0;
-                    double beta  = 1.0;
-                    auto   prob  = construct_rocblaslt_problem<double, double, double, double>(
-                        matmul_desc,
-                        matA,
-                        matB,
-                        matC,
-                        matD,
-                        &alpha,
-                        &beta,
-                        pref->max_workspace_bytes);
-                    status = getBestSolutions<double, double, double, double>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_bf8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_bf8, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E5M2 && b_type == HIPBLASLT_R_8F_E4M3)
-        {
-            if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                            matmul_desc,
-                            matA,
-                            matB,
-                            matC,
-                            matD,
-                            &alpha,
-                            &beta,
-                            pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_bf8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_bf8, rocblaslt_f8, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8I && b_type == HIPBLASLT_R_8I) //int8 support
-        {
-            if(c_type == HIPBLASLT_R_32I && d_type == HIPBLASLT_R_32I)
-            {
-                if(compute_type == rocblaslt_compute_i32)
-                {
-                    int32_t alpha = 1;
-                    int32_t beta  = 1;
-                    auto    prob  = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t,
-                                                            int32_t>(matmul_desc,
-                                                                     matA,
-                                                                     matB,
-                                                                     matC,
-                                                                     matD,
-                                                                     &alpha,
-                                                                     &beta,
-                                                                     pref->max_workspace_bytes);
-                    status = getBestSolutions<hipblasLtInt8, hipblasLtInt8, int32_t, int32_t>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_8I && d_type == HIPBLASLT_R_8I)
-            {
-                if(compute_type == rocblaslt_compute_i32)
-                {
-                    int32_t alpha = 1;
-                    int32_t beta  = 1;
-                    auto    prob  = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t>(matmul_desc,
-                                                                     matA,
-                                                                     matB,
-                                                                     matC,
-                                                                     matD,
-                                                                     &alpha,
-                                                                     &beta,
-                                                                     pref->max_workspace_bytes);
-                    status = getBestSolutions<hipblasLtInt8, hipblasLtInt8, hipblasLtInt8, int32_t>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_16F && b_type == HIPBLASLT_R_8F_E4M3) // mix types
-        {
-            if(c_type == HIPBLASLT_R_8F_E4M3 && d_type == HIPBLASLT_R_8F_E4M3)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_f8,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_half, rocblaslt_f8, rocblaslt_f8, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_half, rocblaslt_f8, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            float,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_half, rocblaslt_f8, float, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-        }
-        else if(a_type == HIPBLASLT_R_8F_E4M3 && b_type == HIPBLASLT_R_16F) // mix types
-        {
-            if(c_type == HIPBLASLT_R_8F_E4M3 && d_type == HIPBLASLT_R_8F_E4M3)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            rocblaslt_f8,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_half, rocblaslt_f8, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_16F && d_type == HIPBLASLT_R_16F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_half, rocblaslt_half, float>(
-                        prob,
-                        handle,
-                        tensile_data,
-                        requestedAlgoCount,
-                        heuristicResultsArray,
-                        returnAlgoCount,
-                        pref->max_workspace_bytes);
-                }
-            }
-            else if(c_type == HIPBLASLT_R_32F && d_type == HIPBLASLT_R_32F)
-            {
-                if(compute_type == rocblaslt_compute_f32_fast_f16)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float,
-                                                            float>(matmul_desc,
-                                                                   matA,
-                                                                   matB,
-                                                                   matC,
-                                                                   matD,
-                                                                   &alpha,
-                                                                   &beta,
-                                                                   pref->max_workspace_bytes);
-                    status = getBestSolutions<rocblaslt_f8, rocblaslt_half, float, float>(
+                    status = getBestSolutions<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                         prob,
                         handle,
                         tensile_data,
@@ -2149,7 +1064,6 @@ rocblaslt_status
         }
         else
         {
-            log_error(__func__, "No such template.");
             status = rocblaslt_status_not_implemented;
         }
 
@@ -2173,10 +1087,10 @@ void rocblaslt_init_gemmData(rocblaslt_handle       handle,
                              rocblaslt::RocGemmType gemmType,
                              hipblasOperation_t     opA,
                              hipblasOperation_t     opB,
-                             hipblasltDatatype_t    typeA,
-                             hipblasltDatatype_t    typeB,
-                             hipblasltDatatype_t    typeC,
-                             hipblasltDatatype_t    typeD,
+                             hipblasDatatype_t      typeA,
+                             hipblasDatatype_t      typeB,
+                             hipblasDatatype_t      typeC,
+                             hipblasDatatype_t      typeD,
                              rocblaslt_compute_type typeCompute,
                              size_t                 maxWorkspaceBytes,
                              std::shared_ptr<void>& gemmData)
@@ -2199,10 +1113,10 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
     rocblaslt::RocGemmType                          typeGemm,
     hipblasOperation_t                              opA,
     hipblasOperation_t                              opB,
-    hipblasltDatatype_t                             typeA,
-    hipblasltDatatype_t                             typeB,
-    hipblasltDatatype_t                             typeC,
-    hipblasltDatatype_t                             typeD,
+    hipblasDatatype_t                               typeA,
+    hipblasDatatype_t                               typeB,
+    hipblasDatatype_t                               typeC,
+    hipblasDatatype_t                               typeD,
     rocblaslt_compute_type                          typeCompute,
     std::vector<rocblaslt_matmul_heuristic_result>& heuristicResults)
 {
@@ -2213,7 +1127,7 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
         return rocblaslt_status_invalid_handle;
     }
     // Create dummy
-    auto initMat = [](_rocblaslt_matrix_layout& mat, hipblasltDatatype_t type) {
+    auto initMat = [](_rocblaslt_matrix_layout& mat, hipblasDatatype_t type) {
         mat.m    = 1;
         mat.n    = 1;
         mat.ld   = 1;
@@ -2236,27 +1150,27 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
     size_t           maxWorkspaceSize = std::numeric_limits<size_t>::max();
     try
     {
-        if(typeA == HIPBLASLT_R_32F && typeB == HIPBLASLT_R_32F)
+        if(typeA == HIPBLAS_R_32F && typeB == HIPBLAS_R_32F)
         {
-            if(typeC == HIPBLASLT_R_32F && typeD == HIPBLASLT_R_32F)
+            if(typeC == HIPBLAS_R_32F && typeD == HIPBLAS_R_32F)
             {
                 if(typeCompute == rocblaslt_compute_f32
                    || typeCompute == rocblaslt_compute_f32_fast_xf32)
                 {
                     float alpha = 1.0;
                     float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<float, float, float, float>(
+                    auto  prob  = ConstructRocblasltProblem<float, float, float>(
                         &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
                     if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
                     {
-                        status = getAllSolutions<float, float, float, float>(
+                        status = getAllSolutions<float, float, float>(
                             prob, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
                     {
-                        std::vector<RocblasltContractionProblem<float, float, float, float>> probs
+                        std::vector<RocblasltContractionProblem<float, float, float>> probs
                             = {prob};
-                        status = getAllSolutions<float, float, float, float>(
+                        status = getAllSolutions<float, float, float>(
                             probs, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else
@@ -2267,38 +1181,27 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
                 }
             }
         }
-        else if(typeA == HIPBLASLT_R_16F && typeB == HIPBLASLT_R_16F)
+        else if(typeA == HIPBLAS_R_16F && typeB == HIPBLAS_R_16F)
         {
-            if(typeC == HIPBLASLT_R_16F && typeD == HIPBLASLT_R_16F)
+            if(typeC == HIPBLAS_R_16F && typeD == HIPBLAS_R_16F)
             {
                 if(typeCompute == rocblaslt_compute_f32)
                 {
                     float alpha = 1.0;
                     float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            rocblaslt_half,
-                                                            float>(
+                    auto  prob  = ConstructRocblasltProblem<rocblaslt_half, rocblaslt_half, float>(
                         &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
                     if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
                     {
-                        status = getAllSolutions<rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 float>(
+                        status = getAllSolutions<rocblaslt_half, rocblaslt_half, float>(
                             prob, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
                     {
-                        std::vector<RocblasltContractionProblem<rocblaslt_half,
-                                                                rocblaslt_half,
-                                                                rocblaslt_half,
-                                                                float>>
+                        std::vector<
+                            RocblasltContractionProblem<rocblaslt_half, rocblaslt_half, float>>
                             probs = {prob};
-                        status    = getAllSolutions<rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 rocblaslt_half,
-                                                 float>(
+                        status    = getAllSolutions<rocblaslt_half, rocblaslt_half, float>(
                             probs, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else
@@ -2308,14 +1211,17 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
                     }
                 }
             }
-            else if(typeC == HIPBLASLT_R_32F && typeD == HIPBLASLT_R_32F)
+        }
+        else if(typeA == HIPBLAS_R_16B && typeB == HIPBLAS_R_16B)
+        {
+            if(typeC == HIPBLAS_R_16B && typeD == HIPBLAS_R_16B)
             {
                 if(typeCompute == rocblaslt_compute_f32)
                 {
                     float alpha = 1.0;
                     float beta  = 1.0;
                     auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_half, rocblaslt_half, float, float>(
+                        = ConstructRocblasltProblem<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                             &matmul_desc,
                             &matA,
                             &matB,
@@ -2326,351 +1232,17 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
                             maxWorkspaceSize);
                     if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
                     {
-                        status = getAllSolutions<rocblaslt_half, rocblaslt_half, float, float>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<rocblaslt_half,
-                                                                rocblaslt_half,
-                                                                float,
-                                                                float>>
-                            probs = {prob};
-                        status    = getAllSolutions<rocblaslt_half, rocblaslt_half, float, float>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-        }
-        else if(typeA == HIPBLASLT_R_16B && typeB == HIPBLASLT_R_16B)
-        {
-            if(typeC == HIPBLASLT_R_16B && typeD == HIPBLASLT_R_16B)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            rocblaslt_bfloat16,
-                                                            float>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 float>(
+                        status = getAllSolutions<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                             prob, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
                     {
                         std::vector<RocblasltContractionProblem<rocblaslt_bfloat16,
                                                                 rocblaslt_bfloat16,
-                                                                rocblaslt_bfloat16,
                                                                 float>>
                             probs = {prob};
-                        status    = getAllSolutions<rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 rocblaslt_bfloat16,
-                                                 float>(
+                        status    = getAllSolutions<rocblaslt_bfloat16, rocblaslt_bfloat16, float>(
                             probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-        }
-        else if(typeA == HIPBLASLT_R_8F_E4M3 && typeB == HIPBLASLT_R_8F_E4M3)
-        {
-            if(typeC == HIPBLASLT_R_32F && typeD == HIPBLASLT_R_32F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_f8, float, float>(
-                            &matmul_desc,
-                            &matA,
-                            &matB,
-                            &matC,
-                            &matD,
-                            &alpha,
-                            &beta,
-                            maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<rocblaslt_f8, rocblaslt_f8, float, float>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<
-                            RocblasltContractionProblem<rocblaslt_f8, rocblaslt_f8, float, float>>
-                            probs = {prob};
-                        status    = getAllSolutions<rocblaslt_f8, rocblaslt_f8, float, float>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-            else if(typeC == HIPBLASLT_R_16F && typeD == HIPBLASLT_R_16F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<rocblaslt_f8, rocblaslt_f8, rocblaslt_half, float>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<rocblaslt_f8,
-                                                                rocblaslt_f8,
-                                                                rocblaslt_half,
-                                                                float>>
-                            probs = {prob};
-                        status = getAllSolutions<rocblaslt_f8, rocblaslt_f8, rocblaslt_half, float>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-        }
-        else if(typeA == HIPBLASLT_R_8F_E4M3 && typeB == HIPBLASLT_R_8F_E5M2)
-        {
-            if(typeC == HIPBLASLT_R_32F && typeD == HIPBLASLT_R_32F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                            &matmul_desc,
-                            &matA,
-                            &matB,
-                            &matC,
-                            &matD,
-                            &alpha,
-                            &beta,
-                            maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<
-                            RocblasltContractionProblem<rocblaslt_f8, rocblaslt_bf8, float, float>>
-                            probs = {prob};
-                        status    = getAllSolutions<rocblaslt_f8, rocblaslt_bf8, float, float>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-            else if(typeC == HIPBLASLT_R_16F && typeD == HIPBLASLT_R_16F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_f8,
-                                                            rocblaslt_bf8,
-                                                            rocblaslt_half,
-                                                            float>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status
-                            = getAllSolutions<rocblaslt_f8, rocblaslt_bf8, rocblaslt_half, float>(
-                                prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<rocblaslt_f8,
-                                                                rocblaslt_bf8,
-                                                                rocblaslt_half,
-                                                                float>>
-                            probs = {prob};
-                        status
-                            = getAllSolutions<rocblaslt_f8, rocblaslt_bf8, rocblaslt_half, float>(
-                                probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-        }
-        else if(typeA == HIPBLASLT_R_8F_E5M2 && typeB == HIPBLASLT_R_8F_E4M3)
-        {
-            if(typeC == HIPBLASLT_R_32F && typeD == HIPBLASLT_R_32F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob
-                        = construct_rocblaslt_problem<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                            &matmul_desc,
-                            &matA,
-                            &matB,
-                            &matC,
-                            &matD,
-                            &alpha,
-                            &beta,
-                            maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<
-                            RocblasltContractionProblem<rocblaslt_bf8, rocblaslt_f8, float, float>>
-                            probs = {prob};
-                        status    = getAllSolutions<rocblaslt_bf8, rocblaslt_f8, float, float>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-            else if(typeC == HIPBLASLT_R_16F && typeD == HIPBLASLT_R_16F)
-            {
-                if(typeCompute == rocblaslt_compute_f32)
-                {
-                    float alpha = 1.0;
-                    float beta  = 1.0;
-                    auto  prob  = construct_rocblaslt_problem<rocblaslt_bf8,
-                                                            rocblaslt_f8,
-                                                            rocblaslt_half,
-                                                            float>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status
-                            = getAllSolutions<rocblaslt_bf8, rocblaslt_f8, rocblaslt_half, float>(
-                                prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<rocblaslt_bf8,
-                                                                rocblaslt_f8,
-                                                                rocblaslt_half,
-                                                                float>>
-                            probs = {prob};
-                        status
-                            = getAllSolutions<rocblaslt_bf8, rocblaslt_f8, rocblaslt_half, float>(
-                                probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-        }
-        else if(typeA == HIPBLASLT_R_8I && typeB == HIPBLASLT_R_8I) //int8
-        {
-            if(typeC == HIPBLASLT_R_32I && typeD == HIPBLASLT_R_32I)
-            {
-                if(typeCompute == rocblaslt_compute_i32)
-                {
-                    int32_t alpha = 1;
-                    int32_t beta  = 1;
-                    auto    prob  = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t,
-                                                            int32_t>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status = getAllSolutions<hipblasLtInt8, hipblasLtInt8, int32_t, int32_t>(
-                            prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<hipblasLtInt8,
-                                                                hipblasLtInt8,
-                                                                int32_t,
-                                                                int32_t>>
-                            probs = {prob};
-                        status    = getAllSolutions<hipblasLtInt8, hipblasLtInt8, int32_t, int32_t>(
-                            probs, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else
-                    {
-                        log_api(__func__, "Invalid gemm type", static_cast<int>(typeGemm));
-                        status = rocblaslt_status_not_implemented;
-                    }
-                }
-            }
-            else if(typeC == HIPBLASLT_R_8I && typeD == HIPBLASLT_R_8I)
-            {
-                if(typeCompute == rocblaslt_compute_i32)
-                {
-                    int32_t alpha = 1;
-                    int32_t beta  = 1;
-                    auto    prob  = construct_rocblaslt_problem<hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            hipblasLtInt8,
-                                                            int32_t>(
-                        &matmul_desc, &matA, &matB, &matC, &matD, &alpha, &beta, maxWorkspaceSize);
-                    if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GEMM)
-                    {
-                        status
-                            = getAllSolutions<hipblasLtInt8, hipblasLtInt8, hipblasLtInt8, int32_t>(
-                                prob, handle, heuristicResults, maxWorkspaceSize);
-                    }
-                    else if(typeGemm == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
-                    {
-                        std::vector<RocblasltContractionProblem<hipblasLtInt8,
-                                                                hipblasLtInt8,
-                                                                hipblasLtInt8,
-                                                                int32_t>>
-                            probs = {prob};
-                        status
-                            = getAllSolutions<hipblasLtInt8, hipblasLtInt8, hipblasLtInt8, int32_t>(
-                                probs, handle, heuristicResults, maxWorkspaceSize);
                     }
                     else
                     {
@@ -2682,34 +1254,9 @@ rocblaslt_status rocblaslt_matmul_get_all_algos_cpp(
         }
         else
         {
-            log_error(__func__, "No such template.");
             status = rocblaslt_status_not_implemented;
         }
 
-        if(status != rocblaslt_status_success)
-        {
-            throw status;
-        }
-    }
-    catch(const rocblaslt_status& status)
-    {
-        return status;
-    }
-    return rocblaslt_status_success;
-}
-
-rocblaslt_status rocblaslt_matmul_get_algos_from_index_cpp(
-    rocblaslt_handle                                handle,
-    std::vector<int>&                               solutionIndex,
-    std::vector<rocblaslt_matmul_heuristic_result>& heuristicResults)
-{
-    rocblaslt_status status = rocblaslt_status_success;
-    try
-    {
-        size_t maxWorkspaceSize = std::numeric_limits<size_t>::max();
-        status = getSolutionsFromIndex(handle, solutionIndex, heuristicResults, maxWorkspaceSize);
-
-        log_api(__func__, "returnAlogCount", heuristicResults.size());
         if(status != rocblaslt_status_success)
         {
             throw status;
@@ -2767,9 +1314,25 @@ rocblaslt_status
  * GPU architecture-related functions
  ******************************************************************************/
 
+// Emulate C++17 std::void_t
+template <typename...>
+using void_t = void;
+
+// By default, use gcnArch converted to a string prepended by gfx
+template <typename PROP, typename = void>
 struct ArchName
 {
-    std::string operator()(const hipDeviceProp_t& prop) const
+    std::string operator()(const PROP& prop) const
+    {
+        return "gfx" + std::to_string(prop.gcnArch);
+    }
+};
+
+// If gcnArchName exists as a member, use it instead
+template <typename PROP>
+struct ArchName<PROP, void_t<decltype(PROP::gcnArchName)>>
+{
+    std::string operator()(const PROP& prop) const
     {
         // strip out xnack/ecc from name
         std::string gcnArchName(prop.gcnArchName);
@@ -2785,37 +1348,5 @@ std::string rocblaslt_internal_get_arch_name()
     static_cast<void>(hipGetDevice(&deviceId));
     hipDeviceProp_t deviceProperties;
     static_cast<void>(hipGetDeviceProperties(&deviceProperties, deviceId));
-    return ArchName{}(deviceProperties);
-}
-
-bool rocblaslt_internal_test_path(const std::string &path)
-{
-#ifdef WIN32
-    return ((_access(path.c_str(), 4) != -1) || (_access(path.c_str(), 6) != -1));
-#else
-    return access(path.c_str(), R_OK) == 0;
-#endif
-
-}
-
-#ifndef WIN32
-int hipblaslt_dl_iterate_phdr_callback(struct dl_phdr_info* hdr_info, size_t size, void* data)
-{
-    // uncomment to see all dependent .so files
-    // fprintf(stderr, "hipblaslt so file: %s\n", hdr_info->dlpi_name);
-    std::pair<std::string, std::string> *typedData = reinterpret_cast<std::pair<std::string, std::string> *>(data);
-    if(hdr_info->dlpi_name && strstr(hdr_info->dlpi_name, typedData->second.c_str()))
-    {
-        typedData->first.assign(hdr_info->dlpi_name);
-        return 1;
-    }
-    return 0;
-}
-#endif
-
-std::string rocblaslt_internal_get_so_path(const std::string &keyword)
-{
-    std::pair<std::string, std::string> result{"", keyword};
-    dl_iterate_phdr(hipblaslt_dl_iterate_phdr_callback, &result);
-    return result.first;
+    return ArchName<hipDeviceProp_t>{}(deviceProperties);
 }

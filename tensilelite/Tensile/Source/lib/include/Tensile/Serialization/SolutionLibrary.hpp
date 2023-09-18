@@ -120,7 +120,7 @@ namespace Tensile
                     if(iter == ctx->solutions->end())
                     {
                         std::ostringstream msg;
-                        msg << "[SolutionLibrary] Invalid solution index: " << index;
+                        msg << "Invalid solution index: " << index;
                         iot::setError(io, msg.str());
                     }
                     else

@@ -28,7 +28,6 @@ if(NOT BUILD_CUDA)
   include(src/amd_detail/rocblaslt/CMakeLists.txt)
   set(hipblaslt_source src/amd_detail/hipblaslt.cpp
                        src/amd_detail/hipblaslt-ext.cpp
-                       src/amd_detail/hipblaslt-ext-op.cpp
                          ${hipblaslt_source_common}
                          ${rocblaslt_source})
 else()

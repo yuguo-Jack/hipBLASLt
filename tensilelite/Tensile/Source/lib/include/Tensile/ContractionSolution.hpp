@@ -42,39 +42,6 @@
 
 namespace Tensile
 {
-    template <typename TAct>
-    struct DeviceUserArguments
-    {
-        uint32_t m;
-        uint32_t n;
-        uint32_t batch;
-        uint32_t k;
-        void*    d;
-        void*    c;
-        void*    a;
-        void*    b;
-        uint32_t strideD1;
-        uint32_t strideD2;
-        uint32_t strideC1;
-        uint32_t strideC2;
-        uint32_t strideA1;
-        uint32_t strideA2;
-        uint32_t strideB1;
-        uint32_t strideB2;
-        int8_t   alpha[16];
-        int8_t   beta[16];
-        void*    scaleAlphaVec;
-        void*    bias;
-        int      biasType;
-        uint32_t reserved;
-        void*    e;
-        uint32_t strideE1;
-        uint32_t strideE2;
-        TAct     act0;
-        TAct     act1;
-        int      activationType;
-    } __attribute__((packed));
-
     struct PerfModel
     {
         double clock            = std::numeric_limits<double>::quiet_NaN();
@@ -128,7 +95,7 @@ namespace Tensile
         }
         virtual std::string name() const
         {
-            return solutionName;
+            return kernelName;
         }
         virtual std::string description() const
         {
@@ -206,7 +173,6 @@ namespace Tensile
    */
         size_t requiredWorkspaceSize(Problem const& problem) const;
         size_t requiredWorkspaceSizeGroupedGemm(std::vector<Problem> const& problems) const;
-        size_t requiredHostSizeGroupedGemmSingle(Problem const& problem) const;
 
         static float computeGranularity(float x);
 
@@ -248,8 +214,6 @@ namespace Tensile
         virtual std::vector<KernelInvocation> solve(ContractionProblem const& problem,
                                                     ProblemInputs const&      inputs,
                                                     Hardware const&           hardware,
-                                                    void*                     hipHostMemory,
-                                                    size_t                    hipHostMemorySize,
                                                     hipStream_t               stream) const;
 
         virtual std::vector<KernelInvocation>
@@ -258,67 +222,25 @@ namespace Tensile
         virtual std::vector<KernelInvocation> solveGroupedGemm(std::vector<Problem> const& problems,
                                                                GroupedInputs const&        inputs,
                                                                Hardware const&             hardware,
-                                                               void*       hipHostMemory,
-                                                               size_t      hipHostMemorySize,
                                                                hipStream_t stream) const;
 
-        // The problems and inputs are passed by device memory
-        virtual std::vector<KernelInvocation>
-            solveGroupedGemmGPU(std::vector<Problem> const& problems,
-                                GroupedInputs const&        inputs,
-                                const void*                 dUA,
-                                const void*                 workspace,
-                                hipStream_t                 stream) const;
-
-        // For Tensile debugging, will allocate and initialize DeviceUserArguments with the problems and inputs.
-        virtual std::vector<KernelInvocation> solveTensileGPU(ContractionProblem const& problem,
-                                                              ProblemInputs const&      inputs,
-                                                              Hardware const&           hardware,
-                                                              void**                    dUA,
-                                                              void**                    dUAHost,
-                                                              void*       hipHostMemory,
-                                                              size_t      hipHostMemorySize,
-                                                              hipStream_t stream) const;
-
-        // For Tensile debugging, will allocate and initialize DeviceUserArguments with the problems and inputs.
-        virtual std::vector<KernelInvocation>
-            solveTensileGroupedGemmGPU(std::vector<Problem> const& problems,
-                                       GroupedInputs const&        inputs,
-                                       Hardware const&             hardware,
-                                       void**                      dUA,
-                                       void**                      dUAHost,
-                                       void*                       hipHostMemory,
-                                       size_t                      hipHostMemorySize,
-                                       hipStream_t                 stream) const;
-
-        virtual void relaseDeviceUserArgs(void* dUA, void* dUAHost);
-
-        template <bool T_Debug, bool insertKernelArgs, typename KA>
+        template <bool T_Debug>
         void singleCallArgs(Problem const&           problem,
                             ContractionInputs const& inputs,
+                            uint32_t const&          problemNumGroupTiles0,
+                            uint32_t const&          problemNumGroupTiles1,
                             uint32_t const&          workspaceOffsetInByte,
-                            KA&                      args) const;
-
-        // Kernel related arguments (e.g. MT, GSU...)
-        template <bool T_Debug, typename KA>
-        void kernelArgs(KA& args) const;
-
-        template <typename KA>
-        inline void calculateSingleCallWorkGroupItems(std::vector<Problem> const& problems,
-                                                      const Tensile::dim3&        workGroupSize,
-                                                      Tensile::dim3&              numWorkGroups,
-                                                      Tensile::dim3&              numWorkItems,
-                                                      KA&                         h_args) const;
+                            bool const&              isGrouped,
+                            KernelArguments&         args) const;
 
         template <bool T_Debug>
         KernelInvocation generateSingleCall(Problem const&           problem,
                                             ContractionInputs const& inputs) const;
 
-        template <bool T_Debug, typename KA>
+        template <bool T_Debug>
         KernelInvocation generateSingleCallGroupedGemm(std::vector<Problem> const& problems,
                                                        GroupedInputs const&        inputs,
-                                                       KA&                         h_args,
-                                                       void const* userArgs = nullptr) const;
+                                                       KernelArguments&            h_args) const;
 
         template <bool T_Debug>
         KernelInvocation generateBetaOnlyCall(Problem const&           problem,
@@ -330,34 +252,21 @@ namespace Tensile
 
         std::string betaOnlyKernelName(Problem const& problem) const;
 
-        template <bool T_Debug, typename KA>
+        template <bool T_Debug>
         void outputConversionCallArgs(Problem const&           problem,
                                       ContractionInputs const& inputs,
                                       uint32_t const&          workspaceOffsetInByte,
-                                      KA&                      args) const;
-
-        template <typename KA>
-        inline void calculateConversionCallWorkGroupItems(
-            std::vector<ContractionSolution::Problem> const& problems,
-            size_t&                                          vw,
-            const Tensile::dim3&                             workGroupSize,
-            Tensile::dim3&                                   numWorkGroups,
-            Tensile::dim3&                                   numWorkItems,
-            KA&                                              args) const;
+                                      KernelArguments&         args) const;
 
         template <bool T_Debug>
         KernelInvocation generateOutputConversionCall(Problem const&           problem,
                                                       ContractionInputs const& inputs) const;
 
-        template <bool T_Debug, typename KA>
-        KernelInvocation generateOutputConversionCallGroupedGemm(
-            std::vector<Problem> const& problems, GroupedInputs const& inputs, KA& h_args) const;
-
         template <bool T_Debug>
-        KernelInvocation updateUserArgsOutputConversionCallGroupedGemm(
-            std::vector<ContractionSolution::Problem> const& problems,
-            const void*                                      userArgs,
-            const void*                                      workspace) const;
+        KernelInvocation
+            generateOutputConversionCallGroupedGemm(std::vector<Problem> const& problems,
+                                                    GroupedInputs const&        inputs,
+                                                    KernelArguments&            h_args) const;
 
         std::string outputConversionKernelName(Problem const&           problem,
                                                ContractionInputs const& inputs,
@@ -406,44 +315,37 @@ namespace Tensile
             size_t workspaceSizePerElemBias = 0;
 
             bool activationFused = true;
-
-            std::string customKernelName;
         };
 
         struct ProblemType
         {
             std::string           operationIdentifier;
-            bool                  transA                    = false;
-            bool                  transB                    = false;
-            DataType              aType                     = DataType::Float;
-            DataType              bType                     = DataType::Float;
-            DataType              cType                     = DataType::Float;
-            DataType              dType                     = DataType::Float;
-            DataType              eType                     = DataType::Float;
-            DataType              computeInputType          = DataType::Float;
-            DataType              computeType               = DataType::Float;
-            DataType              f32XdlMathOp              = DataType::Float;
-            DataType              activationComputeDataType = DataType::Float;
-            bool                  highPrecisionAccumulate   = false;
-            bool                  useBeta                   = true;
-            bool                  useGradient               = false;
-            bool                  useBias                   = false;
-            bool                  useE                      = false;
-            bool                  useScaleAB                = false;
-            bool                  useScaleCD                = false;
-            bool                  useScaleAlphaVec          = false;
-            bool                  useInitialStridesAB       = false;
-            bool                  useInitialStridesCD       = false;
-            bool                  stridedBatched            = true;
-            bool                  groupedGemm               = false;
-            bool                  fp16AltImpl               = false;
-            ActivationType        activationType            = ActivationType::None;
-            int                   activationArgLength       = 0;
-            bool                  activationNoGuard         = false;
+            bool                  transA                  = false;
+            bool                  transB                  = false;
+            DataType              aType                   = DataType::Float;
+            DataType              bType                   = DataType::Float;
+            DataType              cType                   = DataType::Float;
+            DataType              dType                   = DataType::Float;
+            DataType              eType                   = DataType::Float;
+            DataType              f32XdlMathOp            = DataType::Float;
+            DataType              computeType             = DataType::Float;
+            bool                  highPrecisionAccumulate = false;
+            bool                  useBeta                 = true;
+            bool                  useGradient             = false;
+            bool                  useBias                 = false;
+            bool                  useE                    = false;
+            bool                  useScaleDVec            = false;
+            bool                  useInitialStridesAB     = false;
+            bool                  useInitialStridesCD     = false;
+            bool                  stridedBatched          = true;
+            bool                  groupedGemm             = false;
+            bool                  fp16AltImpl             = false;
+            ActivationType        activationType          = ActivationType::None;
+            bool                  activationHPA           = false;
+            bool                  activationNoGuard       = false;
             std::vector<int>      biasSrcWhiteList;
             std::vector<DataType> biasDataTypeWhiteList;
-            bool                  sparseA                    = false;
-            bool                  supportDeviceUserArguments = false;
+            bool                  sparseA = false;
         };
 
         struct LinearModel
@@ -455,7 +357,6 @@ namespace Tensile
 
         int                          index = 0;
         std::string                  kernelName;
-        std::string                  solutionName;
         ThreadSafeValue<std::string> codeObjectFilename;
         bool                         debugKernel   = false;
         bool                         kernelArgsLog = false;
@@ -469,25 +370,19 @@ namespace Tensile
 
         ProblemType problemType;
 
-        // This will be calculated when getSolution is called
-        size_t requiredHostWorkspaceSizePerProblem = static_cast<size_t>(-1);
-
         /// Debugging purposes.  Shouldn't contain any vital information that isn't
         /// somewhere else.
         int32_t               libraryLogicIndex = -1;
         std::map<int, double> ideals;
         LinearModel           linearModel;
 
+        int32_t staggerUIter(Problem const& problem) const;
+
         uint32_t magicNumberAlg1(uint32_t x, uint32_t* magicShift) const;
         uint32_t magicNumberAlg2(uint32_t x, uint32_t* magicShift) const;
         uint32_t magicNumber(int magicDivAlg, uint32_t x, uint32_t* magicShift) const;
         uint32_t smallMagicNumber(uint32_t x) const;
     };
-
-    template <typename TAct>
-    void setDeviceUserArgs(std::vector<ContractionSolution::Problem> const& problems,
-                           ContractionSolution::GroupedInputs const&        inputs,
-                           DeviceUserArguments<TAct>*                       args);
 
     std::ostream& operator<<(std::ostream&                                      stream,
                              ContractionSolution::StaticPerformanceModel const& spm);

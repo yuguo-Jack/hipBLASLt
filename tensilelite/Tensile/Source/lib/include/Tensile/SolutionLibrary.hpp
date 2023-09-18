@@ -59,8 +59,7 @@ namespace Tensile
            && solutions.problemType.bType == problem.b().dataType()
            && solutions.problemType.cType == problem.c().dataType()
            && solutions.problemType.dType == problem.d().dataType()
-           && solutions.problemType.computeType == problem.computeType()
-           && solutions.problemType.groupedGemm == problem.groupedGemm())
+           && solutions.problemType.computeType == problem.computeType())
             return true;
         return false;
     }
@@ -132,12 +131,6 @@ namespace Tensile
                                                                Hardware const&  hardware,
                                                                const int        index) const
             = 0;
-
-        virtual std::shared_ptr<MySolution> getSolutionByIndex(const int index) const
-        {
-            throw std::runtime_error("[getSolutionByIndex] You should not reach here.");
-            return std::shared_ptr<MySolution>();
-        }
 
         virtual std::shared_ptr<MySolution> findBestSolution(MyProblem const& problem,
                                                              Hardware const&  hardware,
