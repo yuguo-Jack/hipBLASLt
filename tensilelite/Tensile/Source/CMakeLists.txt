@@ -51,9 +51,13 @@ if(NOT DEFINED CXX_VERSION_STRING)
 endif()
 
 if(CMAKE_CXX_COMPILER STREQUAL "hipcc")
-  set(TENSILE_GPU_ARCHS gfx803 gfx900 gfx906:xnack- gfx908:xnack- gfx90a:xnack- gfx1010 gfx1011 gfx1012 gfx1030 gfx1100 gfx1101 gfx1102 CACHE STRING "GPU architectures")
+  set(TENSILE_GPU_ARCHS gfx926 CACHE STRING "GPU architectures")
 else()
-  set(TENSILE_GPU_ARCHS gfx803 gfx900 gfx906 gfx908 gfx90a gfx1010 gfx1011 gfx1012 gfx1030 gfx1100 gfx1101 gfx1102 CACHE STRING "GPU architectures")
+  set(TENSILE_GPU_ARCHS gfx926 CACHE STRING "GPU architectures")
+endif()
+
+if (CMAKE_BUILD_TYPE MATCHES "Debug" AND NOT WIN32)
+    set (CMAKE_CXX_FLAGS_DEBUG "-O1 ${CMAKE_CXX_FLAGS_DEBUG} -gdwarf-2 -gstrict-dwarf -ggdb" )
 endif()
 
 include(CMakeDependentOption)

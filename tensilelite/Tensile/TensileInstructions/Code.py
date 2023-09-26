@@ -22,7 +22,7 @@
 
 from .Base import Item, getGfxName
 from .Enums import SignatureValueKind
-from .Formatting import slash, slash50, block, block3Line, blockNewLine, \
+from .Formatting import slash, slash50, block, block3Line, blockNewLine, blockNLineCode, \
                         formatStr, printExit
 from .Instructions import Instruction, MacroInstruction
 
@@ -234,6 +234,9 @@ class Module(Item):
 
     def addComment2(self, comment):
         self.add(TextBlock(block3Line(comment)))
+
+    def addBlockCode(self, comment):
+        self.add(TextBlock(blockNLineCode(comment)))
 
     def prettyPrint(self,indent=""):
         ostream = ""

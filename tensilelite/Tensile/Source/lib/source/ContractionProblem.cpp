@@ -528,7 +528,7 @@ namespace Tensile
         , m_freeIndices(freeIndices)
         , m_batchIndices(batchIndices)
         , m_boundIndices(boundIndices)
-        , m_beta(beta)
+        , m_beta(0.0)
     {
         m_workspaceSize                                      = workspaceSize;
         m_tensors[ContractionProblemGemm::TENSOR::A]         = a;
@@ -642,7 +642,7 @@ namespace Tensile
         m_freeIndices     = freeIndices;
         m_batchIndices    = batchIndices;
         m_boundIndices    = boundIndices;
-        m_beta            = beta;
+        m_beta            = 0.0;
         m_workspaceSize   = workspaceSize;
         m_betaRestriction = toScalarValueEnum(
             m_beta); // Set enum using beta to potentially allow for faster solutions

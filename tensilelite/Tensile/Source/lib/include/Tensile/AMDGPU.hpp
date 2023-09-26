@@ -58,6 +58,7 @@ namespace Tensile
             gfx900  = 900,
             gfx906  = 906,
             gfx908  = 908,
+            gfx926  = 25271, // kongming Chip ID
             gfx90a  = 910,
             gfx940  = 940,
             gfx941  = 941,
@@ -83,6 +84,8 @@ namespace Tensile
                 return "gfx906";
             case AMDGPU::Processor::gfx908:
                 return "gfx908";
+            case AMDGPU::Processor::gfx926:
+                return "gfx926";
             case AMDGPU::Processor::gfx90a:
                 return "gfx90a";
             case AMDGPU::Processor::gfx940:

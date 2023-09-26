@@ -2955,6 +2955,7 @@ class KernelWriterAssembly(KernelWriter):
       tmpAddr = self.vgprPool.checkOut(1,"tmp vgpr for lds init C registers")
       module.add(VMovB32(dst=vgpr(tmpAddr), src=self.consts.ldsOOB, comment="set out-of-bound addr"))
 
+    globalParameters["numCVgpr"] = numCVgpr
     for i in range(startNumCVgpr, numCVgpr):
       copyInst = VMovB32 if self.states.c.numVgprValu else VAccvgprWrite
       regStr = vgpr("ValuC+%u"%i) if self.states.c.numVgprValu else accvgpr(i)

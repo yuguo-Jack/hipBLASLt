@@ -30,6 +30,12 @@ __TI_DEBUG_LEVEL__ = 0
 # Text format
 ########################################
 
+def blockNLineCode(comment):
+    kStr = "\n/***********Code Block*************/\n"
+    kStr += " %s " % comment
+    kStr += "/************Code Block************/\n"
+    return kStr 
+
 def slash(comment):
     """
     This comment is a single line // MYCOMMENT

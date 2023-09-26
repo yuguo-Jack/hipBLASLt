@@ -509,7 +509,7 @@ namespace
             hipblasDatatype_to_tensile_type(prob.bias_type), biasSize, prob.gradient, biasSrc);
 
         // set ScaleDVec mode
-        tensileProblem.setUseScaleDVec(true);
+        tensileProblem.setUseScaleDVec(false);
         tensileProblem.setScaleDVec(Tensile_Tc, d.sizes()[0]);
 
         // set Actvation
@@ -670,7 +670,7 @@ namespace
                 hipblasDatatype_to_tensile_type(prob.bias_type), biasSize, prob.gradient, biasSrc);
 
             // set ScaleDVec mode
-            tensileProblem.setUseScaleDVec(true);
+            tensileProblem.setUseScaleDVec(false);
             tensileProblem.setScaleDVec(Tensile_Tc, d.sizes()[0]);
 
             // set Actvation

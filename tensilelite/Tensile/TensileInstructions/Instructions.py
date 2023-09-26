@@ -294,8 +294,10 @@ class MFMAInstruction(Instruction):
         if len(self.variant) == 3:
             variantStr = "{}x{}x{}".format(*self.variant)
             mfma_1k = "_1k" if self.mfma1k else ""
-            self.setInst("v_mfma_%s_%s%s%s"%(self.typeConvert(self.accType), variantStr, \
-                self.typeConvert(self.instType), mfma_1k))
+            self.setInst("v_mmac_%s_%s"%(variantStr, \
+                         self.typeConvert(self.instType)))
+            # self.setInst("v_mfma_%s_%s%s%s"%(self.typeConvert(self.accType), variantStr, \
+            #     self.typeConvert(self.instType), mfma_1k))
         elif len(self.variant) == 4:
             variantStr = "{}x{}x{}".format(*self.variant)
             strB = "%ub_" % self.variant[3] if self.variant[3] > 1 else ""
@@ -305,7 +307,7 @@ class MFMAInstruction(Instruction):
             assert("Currently does not support mfma variant %u"%len(self.variant) and 0)
 
     def getArgStr(self) -> str:
-        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2)
+        return str(self.acc) + ", " + str(self.a) + ", " + str(self.b) + ", " + str(self.acc2) + ", vstep:0"
 
     def toList(self) -> list:
         self.preStr()

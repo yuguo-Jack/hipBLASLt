@@ -1938,7 +1938,7 @@ class Solution(collections.abc.Mapping):
       state["_WorkspaceSizePerElemBias"] = 0
       if state["ProblemType"]["UseBias"] and state["ProblemType"]["Gradient"]:
         computeBytes = state["ProblemType"]["ComputeDataType"].numBytes()
-        if state["ProblemType"]["BiasSrc"] == "D" and (state["ProblemType"]["ComputeDataType"] != state["ProblemType"]["DestDataType"]):
+        if (state["ProblemType"]["BiasSrc"] == "D" and (state["ProblemType"]["ComputeDataType"] != state["ProblemType"]["DestDataType"])) or (state["ProblemType"]["BiasSrc"] == "D" and globalParameters["CurrentISA"] == (9,2,6)):
           state["_WorkspaceSizePerElemBias"] = computeBytes
         elif state["GlobalSplitU"] > 1:
           if state["_GlobalAccumulation"] == 'SingleBuffer':

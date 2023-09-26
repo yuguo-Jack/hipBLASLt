@@ -53,6 +53,9 @@ workingDirectoryStack = []
 ########################################
 # common
 ########################################
+globalParameters["OutputLayoutTransform"] = True     # for dcu
+globalParameters["numCVgpr"] = 4                     # 4,8,16,32,64 for dcu
+
 globalParameters["MinimumRequiredVersion"] = "0.0.0" # which version of tensile is required to handle all the features required by this configuration file
 globalParameters["PerformanceMetric"] = "DeviceEfficiency" # performance metric for benchmarking; one of {DeviceEfficiency, CUEfficiency}
 globalParameters["PrintLevel"] = 1                # how much info to print in generator. 0=none, 1=standard, 2=verbose
@@ -116,7 +119,7 @@ globalParameters["UnrollLoopEfficiencyEnable"] = False   # if True split(S) MAC&
 # less common
 ########################################
 globalParameters["CMakeBuildType"] = "Release"            # whether benchmark clients and library client should be release or debug
-globalParameters["PrintSolutionRejectionReason"] = False  # when a solution is marked as invalid, print why
+globalParameters["PrintSolutionRejectionReason"] = True  # when a solution is marked as invalid, print why
 globalParameters["LibraryFormat"] = "yaml"                # set library backend (either yaml or msgpack)
 globalParameters["EmbedLibrary"] = None                   # whether library should be embedded or not
 
@@ -183,7 +186,7 @@ globalParameters["PrintTensorD"] = 0          # Print TensorD.  0x1=after init; 
 globalParameters["PrintTensorRef"] = 0          # Print reference tensor.  0x1=after init; 0x2=after copy-back; 0x3=both
 globalParameters["PrintIndexAssignments"] = 0      # Print the tensor index assignment info
 globalParameters["PrintWinnersOnly"] = False      # Only print the solutions which become the fastest
-globalParameters["PrintCodeCommands"] = False  # print the commands used to generate the code objects (asm,link,hip-clang, etc)
+globalParameters["PrintCodeCommands"] = True  # print the commands used to generate the code objects (asm,link,hip-clang, etc)
 globalParameters["DumpTensors"] = False        # If True, dump tensors to binary files instead of printing them.
 
 # If PrintMax* is greater than the dimension, the middle elements will be repaced with "..."
@@ -202,7 +205,7 @@ globalParameters["MergeFiles"] = True             # F=store every solution and k
 globalParameters["NumMergedFiles"] = 1            # The number of files that kernels should be split between when merging
 
 globalParameters["MaxFileName"] = 64              # If a file name would be longer than this, shorten it with a hash.
-globalParameters["SupportedISA"] = [(8,0,3), (9,0,0), (9,0,6), (9,0,8), (9,0,10), (9,4,0), (9,4,1), (9,4,2), (10,1,0), (10,1,1), (10,1,2), (10,3,0), (11,0,0), (11,0,1), (11,0,2)] # assembly kernels writer supports these architectures
+globalParameters["SupportedISA"] = [(8,0,3), (9,0,0), (9,0,6), (9,0,8), (9,2,6), (9,0,10), (9,4,0), (9,4,1), (9,4,2), (10,1,0), (10,1,1), (10,1,2), (10,3,0), (11,0,0), (11,0,1), (11,0,2)] # assembly kernels writer supports these architectures
 
 globalParameters["GenerateManifestAndExit"] = False               # Output manifest file with list of expected library objects and exit
 globalParameters["NewClient"] = 2                                 # Old client deprecated: NewClient must be set to 2.
@@ -216,7 +219,7 @@ globalParameters["LibraryUpdateFile"] = ""                        # File name fo
 globalParameters["LibraryUpdateComment"] = False                  # Include solution name as a comment in the library update file
 
 # internal, i.e., gets set during startup
-globalParameters["CurrentISA"] = (0,0,0)
+globalParameters["CurrentISA"] = (9,2,6)
 globalParameters["ROCmAgentEnumeratorPath"] = None      # /opt/rocm/bin/rocm_agent_enumerator
 globalParameters["ROCmSMIPath"] = None                  # /opt/rocm/bin/rocm-smi
 globalParameters["AssemblerPath"] = None                # /opt/rocm/hip/bin/hipcc
@@ -276,7 +279,7 @@ architectureMap = {
   'gfx941':'aquavanjaram', 'gfx941:xnack+':'aquavanjaram', 'gfx941:xnack-':'aquavanjaram',
   'gfx942':'aquavanjaram', 'gfx942:xnack+':'aquavanjaram', 'gfx942:xnack-':'aquavanjaram',
   'gfx1010':'navi10', 'gfx1011':'navi12', 'gfx1012':'navi14', 'gfx1030':'navi21',
-  'gfx1100':'navi31', 'gfx1101':'navi32', 'gfx1102':'navi33'
+  'gfx1100':'navi31', 'gfx1101':'navi32', 'gfx1102':'navi33', 'gfx926':'kongming'
 }
 
 def getArchitectureName(gfxName):
@@ -334,7 +337,7 @@ validMFMA["_format9"] = []
 
 for MFMA in [validMFMA["H"], validMFMA["S"], validMFMA["B"], validMFMA["D"], validMFMA["X"]]:
   for MI in MFMA:
-    for bm in range(int(math.log(MI[3],2))+1):
+    for bm in range(int(math.log(MI[3],2))+3):
       for tt0 in range(1,validTT+1):
         for tt1 in range(1,validTT+1):
           for wave_m in range (3):
@@ -351,7 +354,7 @@ validSMFMA["I8"] = validSMFMA["4xi8"]
 validSMFMA["_format9"] = []
 for SMFMA in [validSMFMA["H"], validSMFMA["B"], validSMFMA["4xi8"]]:
   for MI in SMFMA:
-    for bm in range(int(math.log(MI[3],2))+1):
+    for bm in range(int(math.log(MI[3],2))+3):
       for tt0 in range(1,validTT+1):
         for tt1 in range(1,validTT+1):
           for wave_m in range (3):

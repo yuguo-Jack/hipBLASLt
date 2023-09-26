@@ -22,6 +22,10 @@
 #
 ################################################################################
 
+if (CMAKE_BUILD_TYPE MATCHES "Debug" AND NOT WIN32)
+    set (CMAKE_CXX_FLAGS_DEBUG "-O1 ${CMAKE_CXX_FLAGS_DEBUG} -gdwarf-2 -gstrict-dwarf -ggdb" )
+endif()
+
 set(client_sources
     source/BenchmarkTimer.cpp
     source/CSVStackFile.cpp

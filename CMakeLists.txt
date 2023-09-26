@@ -127,7 +127,7 @@ if(NOT BUILD_CUDA)
         message(STATUS "Using hip-clang to build for amdgpu backend")
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_HCC_COMPAT_MODE__=1" )
         if (CMAKE_BUILD_TYPE MATCHES "Debug" AND NOT WIN32)
-            set (CMAKE_CXX_FLAGS_DEBUG "-O1 ${CMAKE_CXX_FLAGS_DEBUG} -gsplit-dwarf -ggdb" )
+            set (CMAKE_CXX_FLAGS_DEBUG "-O1 ${CMAKE_CXX_FLAGS_DEBUG} -gdwarf-2 -gstrict-dwarf -ggdb" )
         endif()
     else()
         message(FATAL_ERROR "'hipcc' compiler required to compile for ROCm platform.")
@@ -146,7 +146,7 @@ else()
 
     #Set the AMDGPU_TARGETS with backward compatiblity
     rocm_check_target_ids(DEFAULT_AMDGPU_TARGETS
-        TARGETS "gfx90a:xnack+;gfx90a:xnack-;gfx940:xnack+;gfx940:xnack-;gfx941:xnack+;gfx941:xnack-;gfx942:xnack+;gfx942:xnack-"
+        TARGETS "gfx926"
     )
 
     if (AMDGPU_TARGETS)
@@ -173,9 +173,9 @@ else()
     set( Tensile_ARCHITECTURE "${AMDGPU_TARGETS}" CACHE STRING "Tensile to use which architecture?" FORCE)
 
     set( Tensile_LOGIC "asm_full" CACHE STRING "Tensile to use which logic?")
-    set( Tensile_CODE_OBJECT_VERSION "V2" CACHE STRING "Tensile code_object_version")
+    set( Tensile_CODE_OBJECT_VERSION "V3" CACHE STRING "Tensile code_object_version")
     set( Tensile_COMPILER "hipcc" CACHE STRING "Tensile compiler")
-    set( Tensile_LIBRARY_FORMAT "msgpack" CACHE STRING "Tensile library format")
+    set( Tensile_LIBRARY_FORMAT "yaml" CACHE STRING "Tensile library format")
     set( Tensile_CPU_THREADS "" CACHE STRING "Number of threads for Tensile parallel build")
 
     option( Tensile_MERGE_FILES "Tensile to merge kernels and solutions files?" ON )
@@ -184,10 +184,10 @@ else()
 
     set( Tensile_TEST_LOCAL_PATH "" CACHE PATH "Use local Tensile directory instead of fetching a GitHub branch" )
 
-    set_property( CACHE Tensile_LOGIC PROPERTY STRINGS aldebaran asm_full asm_lite asm_miopen hip_lite other )
-    set_property( CACHE Tensile_CODE_OBJECT_VERSION PROPERTY STRINGS V2 V3 )
-    set_property( CACHE Tensile_COMPILER PROPERTY STRINGS hcc hipcc)
-    set_property( CACHE Tensile_LIBRARY_FORMAT PROPERTY STRINGS msgpack yaml)
+    set_property( CACHE Tensile_LOGIC PROPERTY STRINGS asm_full asm_lite hpl_lite )
+    set_property( CACHE Tensile_CODE_OBJECT_VERSION PROPERTY STRINGS V3 )
+    set_property( CACHE Tensile_COMPILER PROPERTY STRINGS hipcc)
+    set_property( CACHE Tensile_LIBRARY_FORMAT PROPERTY STRINGS yaml)
 
     if(Tensile_LIBRARY_FORMAT MATCHES "yaml")
       option(TENSILE_USE_LLVM      "Use LLVM for parsing config files." ON)
