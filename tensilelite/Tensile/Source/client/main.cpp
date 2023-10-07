@@ -208,7 +208,7 @@ namespace Tensile
                 ("problem-start-idx",        po::value<int>()->default_value(0),  "First problem to run")
                 ("num-problems",             po::value<int>()->default_value(-1), "Number of problems to run")
 
-                ("solution-start-idx",       po::value<int>()->default_value(-1), "First solution to run")
+                ("solution-start-idx",       po::value<int>()->default_value(0), "First solution to run")
                 ("num-solutions",            po::value<int>()->default_value(-1), "Number of solutions to run")
                 ("best-solution",            po::value<bool>()->default_value(false), "Best solution benchmark mode")
 

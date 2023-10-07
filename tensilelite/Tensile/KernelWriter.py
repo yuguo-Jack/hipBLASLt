@@ -3676,7 +3676,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     numSgprAddressScaleDVec = 0
     if kernel["ProblemType"]["UseScaleDVec"] and (kernel["GlobalSplitU"] == 1):
       numSgprAddressScaleDVec = numSgprAddressA
-      self.defineSgpr("AddressScaleDVec", numSgprAddressScaleDVec)
+      self.defineSgpr("AddressScaleDVec", numSgprAddressScaleDVec, 2)
     self.defineSgpr("StridesD", self.states.d.numSgprStrides)
     self.defineSgpr("StridesC", self.states.c.numSgprStrides)
     self.defineSgpr("StridesA", self.states.a.numSgprStrides)
