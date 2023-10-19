@@ -337,7 +337,7 @@ validMFMA["_format9"] = []
 
 for MFMA in [validMFMA["H"], validMFMA["S"], validMFMA["B"], validMFMA["D"], validMFMA["X"]]:
   for MI in MFMA:
-    for bm in range(int(math.log(MI[3],2))+3):
+    for bm in range(int(math.log(MI[3],2))+1):
       for tt0 in range(1,validTT+1):
         for tt1 in range(1,validTT+1):
           for wave_m in range (3):
@@ -354,7 +354,7 @@ validSMFMA["I8"] = validSMFMA["4xi8"]
 validSMFMA["_format9"] = []
 for SMFMA in [validSMFMA["H"], validSMFMA["B"], validSMFMA["4xi8"]]:
   for MI in SMFMA:
-    for bm in range(int(math.log(MI[3],2))+3):
+    for bm in range(int(math.log(MI[3],2))+1):
       for tt0 in range(1,validTT+1):
         for tt1 in range(1,validTT+1):
           for wave_m in range (3):

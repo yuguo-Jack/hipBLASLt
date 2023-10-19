@@ -200,7 +200,7 @@ class GlobalWriteBatchWriter:
                                "" if idx == len(self.batchElements) -1 else "; ")
                                for idx, element in enumerate(self.batchElements)])
     module.addComment2(commentStr)
-    if self.batchIdx == 0 and globalParameters["OutputLayoutTransform"] == True:
+    if self.batchIdx == 0 and globalParameters["OutputLayoutTransform"] == True and not self.edge and not self.beta:
       globalParameters["OutputLayoutTransform"] = False
       for i in range(0, globalParameters["numCVgpr"], 4): 
         BlockStr = """/***********Layout Transform Block*************/     \n
