@@ -20,7 +20,7 @@ BenchmarkProblems:
     - # ProblemType
       OperationType: GEMM
       DataType: s
-      TransposeA: 0
+      TransposeA: 1
       TransposeB: 0
       UseBeta: False
       Batched: True
