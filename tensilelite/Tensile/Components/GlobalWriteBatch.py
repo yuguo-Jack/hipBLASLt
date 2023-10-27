@@ -202,63 +202,63 @@ class GlobalWriteBatchWriter:
     module.addComment2(commentStr)
     if self.batchIdx == 0 and globalParameters["OutputLayoutTransform"] == True:
       for i in range(0, globalParameters["numCVgpr"], 4): 
-        BlockStr = """/***********Layout Transform Block*************/     \n
-                                v_mov_b32 v254, v%u                        \n                   
-                                v_mov_b32 v253, v%u                        \n        
-                                v_mov_b32 v252, v%u                        \n   
-                                v_mov_b32 v251, v%u                        \n    
-                                v_mov_b32 v250, v[vgprSerial]              \n     
-                                v_lshlrev_b32_e32 v235, 4, v250            \n  
-                                v_lshrrev_b32_e32 v236, 2, v250            \n  
-                                v_and_or_b32 v236, v236, 12, v235          \n
-                                v_and_b32_e32 v236, 60, v236               \n
-                                s_waitcnt lgkmcnt(0)                       \n
-                                v_lshlrev_b32_e32 v236, 2, v236            \n
-                                v_bfe_u32 v250, v250, 2, 2                 \n    
-                                v_cmp_eq_u32_e32 vcc, 1, v250              \n  
-                                ds_bpermute_b32 v237, v236, v251           \n  
-                                ds_bpermute_b32 v238, v236, v252           \n  
-                                ds_bpermute_b32 v241, v236, v251 offset:4  \n  
-                                ds_bpermute_b32 v242, v236, v252 offset:4  \n  
-                                ds_bpermute_b32 v245, v236, v251 offset:8  \n  
-                                ds_bpermute_b32 v246, v236, v252 offset:8  \n  
-                                ds_bpermute_b32 v251, v236, v251 offset:12 \n    
-                                ds_bpermute_b32 v252, v236, v252 offset:12 \n    
-                                ds_bpermute_b32 v239, v236, v253           \n  
-                                ds_bpermute_b32 v243, v236, v253 offset:4  \n  
-                                ds_bpermute_b32 v247, v236, v253 offset:8  \n  
-                                ds_bpermute_b32 v253, v236, v253 offset:12 \n    
-                                ds_bpermute_b32 v240, v236, v254           \n  
-                                ds_bpermute_b32 v244, v236, v254 offset:4  \n  
-                                ds_bpermute_b32 v248, v236, v254 offset:8  \n  
-                                ds_bpermute_b32 v254, v236, v254 offset:12 \n    
-                                s_waitcnt lgkmcnt(14)                      \n
-                                v_cndmask_b32_e32 v236, v237, v238, vcc    \n
-                                s_waitcnt lgkmcnt(12)                      \n
-                                v_cndmask_b32_e32 v237, v241, v242, vcc    \n
-                                s_waitcnt lgkmcnt(10)                      \n
-                                v_cndmask_b32_e32 v238, v245, v246, vcc    \n
-                                s_waitcnt lgkmcnt(8)                       \n
-                                v_cndmask_b32_e32 v251, v251, v252, vcc    \n      
-                                v_cmp_eq_u32_e32 vcc, 2, v250              \n  
-                                s_waitcnt lgkmcnt(7)                       \n
-                                v_cndmask_b32_e32 v252, v236, v239, vcc    \n  
-                                s_waitcnt lgkmcnt(6)                       \n
-                                v_cndmask_b32_e32 v236, v237, v243, vcc    \n
-                                s_waitcnt lgkmcnt(5)                       \n
-                                v_cndmask_b32_e32 v237, v238, v247, vcc    \n
-                                s_waitcnt lgkmcnt(4)                       \n
-                                v_cndmask_b32_e32 v253, v251, v253, vcc    \n      
-                                v_cmp_eq_u32_e32 vcc, 3, v250              \n  
-                                s_waitcnt lgkmcnt(3)                       \n
-                                v_cndmask_b32_e32 v%u, v252, v240, vcc     \n  
-                                s_waitcnt lgkmcnt(2)                       \n
-                                v_cndmask_b32_e32 v%u, v236, v244, vcc     \n
-                                s_waitcnt lgkmcnt(1)                       \n
-                                v_cndmask_b32_e32 v%u, v237, v248, vcc     \n
-                                s_waitcnt lgkmcnt(0)                       \n         
-                                v_cndmask_b32_e32 v%u, v253, v254, vcc     \n    
-                               /************Layout Transform Block************/\n""" % (i+3, i+2, i+1, i, i, i+1, i+2, i+3)
+        BlockStr = """/***********Layout Transform Block*************/\n
+        v_mov_b32 v254, v%u                        \n                   
+        v_mov_b32 v253, v%u                        \n        
+        v_mov_b32 v252, v%u                        \n   
+        v_mov_b32 v251, v%u                        \n    
+        v_mov_b32 v250, v[vgprSerial]              \n     
+        v_lshlrev_b32_e32 v235, 4, v250            \n  
+        v_lshrrev_b32_e32 v236, 2, v250            \n  
+        v_and_or_b32 v236, v236, 12, v235          \n
+        v_and_b32_e32 v236, 60, v236               \n
+        s_waitcnt lgkmcnt(0)                       \n
+        v_lshlrev_b32_e32 v236, 2, v236            \n
+        v_bfe_u32 v250, v250, 2, 2                 \n    
+        v_cmp_eq_u32_e32 vcc, 1, v250              \n  
+        ds_bpermute_b32 v237, v236, v251           \n  
+        ds_bpermute_b32 v238, v236, v252           \n  
+        ds_bpermute_b32 v241, v236, v251 offset:4  \n  
+        ds_bpermute_b32 v242, v236, v252 offset:4  \n  
+        ds_bpermute_b32 v245, v236, v251 offset:8  \n  
+        ds_bpermute_b32 v246, v236, v252 offset:8  \n  
+        ds_bpermute_b32 v251, v236, v251 offset:12 \n    
+        ds_bpermute_b32 v252, v236, v252 offset:12 \n    
+        ds_bpermute_b32 v239, v236, v253           \n  
+        ds_bpermute_b32 v243, v236, v253 offset:4  \n  
+        ds_bpermute_b32 v247, v236, v253 offset:8  \n  
+        ds_bpermute_b32 v253, v236, v253 offset:12 \n    
+        ds_bpermute_b32 v240, v236, v254           \n  
+        ds_bpermute_b32 v244, v236, v254 offset:4  \n  
+        ds_bpermute_b32 v248, v236, v254 offset:8  \n  
+        ds_bpermute_b32 v254, v236, v254 offset:12 \n    
+        s_waitcnt lgkmcnt(14)                      \n
+        v_cndmask_b32_e32 v236, v237, v238, vcc    \n
+        s_waitcnt lgkmcnt(12)                      \n
+        v_cndmask_b32_e32 v237, v241, v242, vcc    \n
+        s_waitcnt lgkmcnt(10)                      \n
+        v_cndmask_b32_e32 v238, v245, v246, vcc    \n
+        s_waitcnt lgkmcnt(8)                       \n
+        v_cndmask_b32_e32 v251, v251, v252, vcc    \n      
+        v_cmp_eq_u32_e32 vcc, 2, v250              \n  
+        s_waitcnt lgkmcnt(7)                       \n
+        v_cndmask_b32_e32 v252, v236, v239, vcc    \n  
+        s_waitcnt lgkmcnt(6)                       \n
+        v_cndmask_b32_e32 v236, v237, v243, vcc    \n
+        s_waitcnt lgkmcnt(5)                       \n
+        v_cndmask_b32_e32 v237, v238, v247, vcc    \n
+        s_waitcnt lgkmcnt(4)                       \n
+        v_cndmask_b32_e32 v253, v251, v253, vcc    \n      
+        v_cmp_eq_u32_e32 vcc, 3, v250              \n  
+        s_waitcnt lgkmcnt(3)                       \n
+        v_cndmask_b32_e32 v%u, v252, v240, vcc     \n  
+        s_waitcnt lgkmcnt(2)                       \n
+        v_cndmask_b32_e32 v%u, v236, v244, vcc     \n
+        s_waitcnt lgkmcnt(1)                       \n
+        v_cndmask_b32_e32 v%u, v237, v248, vcc     \n
+        s_waitcnt lgkmcnt(0)                       \n         
+        v_cndmask_b32_e32 v%u, v253, v254, vcc     \n    
+        /************Layout Transform Block************/\n""" % (i+3, i+2, i+1, i, i, i+1, i+2, i+3)
         module.addBlockCode(BlockStr)
         
     self.ss.setupStoreElementsForBatch(self.kernel, self.gwvw, self.batchElements, self.batchElementSgprs, isOptNLL=False, \
