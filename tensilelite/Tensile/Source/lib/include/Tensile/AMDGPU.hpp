@@ -58,7 +58,7 @@ namespace Tensile
             gfx900  = 900,
             gfx906  = 906,
             gfx908  = 908,
-            gfx926  = 25271, // kongming Chip ID
+            gfx926  = 926, 
             gfx90a  = 910,
             gfx940  = 940,
             gfx941  = 941,

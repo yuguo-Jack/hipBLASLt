@@ -32,8 +32,16 @@ namespace Tensile
 {
     namespace hip
     {
+        int GetGcnArch_SameWithAMD(std::string prop_gcnArchName)
+        {
+            std::string gcnArchName(prop_gcnArchName);
+            std::string gcnArch = gcnArchName.substr(3, gcnArchName.find(":"));
+            int gcnArch_SameWithAMD = atoi(gcnArch.c_str());
+            return gcnArch_SameWithAMD;
+        }
+
         HipAMDGPU::HipAMDGPU(hipDeviceProp_t const& prop)
-            : AMDGPU(static_cast<AMDGPU::Processor>(prop.gcnArch),
+            : AMDGPU(static_cast<AMDGPU::Processor>(GetGcnArch_SameWithAMD(prop.gcnArchName)),
                      prop.multiProcessorCount,
                      std::string(prop.name))
             , properties(prop)
