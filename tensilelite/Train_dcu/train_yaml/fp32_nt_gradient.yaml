@@ -21,7 +21,7 @@ BenchmarkProblems:
       OperationType: GEMM
       DataType: s
       TransposeA: 0
-      TransposeB: 0
+      TransposeB: 1
       UseBeta: False
       Batched: True
       Gradient: True
