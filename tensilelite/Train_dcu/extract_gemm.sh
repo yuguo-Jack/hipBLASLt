@@ -48,48 +48,68 @@ cat $1 | grep  gemm_ex \
 
 
 
+cat $1 | grep  gemm_strided_batched  \
+ | grep "transposeA N --transposeB N" \
+ | awk -F ' --batch_count ' 'OFS="," {print $2}' \
+ | awk '{print $1}' > batchcount.log
 cat $1 | grep  gemm_strided_batched \
  | grep "transposeA N --transposeB N" \
  | awk -F ' -m ' '{print $2}' \
  | awk -F ' -n ' 'OFS="," {print $1,$2}' \
  | awk -F ' -k ' 'OFS="," {print $1,$2,$3}' \
- | awk '{print $1,$19}' \
- | awk '{OFS=","} {print $1,$2,$3}' \
- | sed  "s/.$//g" | sed "s/.$//g" \
+ | awk '{OFS=" "} {print $1}' \
+ | sed 's/$/,/g' > tmp1.log
+paste -d "" tmp1.log batchcount.log > tmp2.log
+cat tmp2.log \
  | awk -F ',' 'OFS="," {print $1,$2,$4,$3}' \
  | sed 's/$/]/g' | sed 's/^/- Exact: [/g' >> NN.log
  
+cat $1 | grep  gemm_strided_batched  \
+ | grep "transposeA N --transposeB T" \
+ | awk -F ' --batch_count ' 'OFS="," {print $2}' \
+ | awk '{print $1}' > batchcount.log
 cat $1 | grep  gemm_strided_batched \
  | grep "transposeA N --transposeB T" \
  | awk -F ' -m ' '{print $2}' \
  | awk -F ' -n ' 'OFS="," {print $1,$2}' \
  | awk -F ' -k ' 'OFS="," {print $1,$2,$3}' \
- | awk '{print $1,$19}' \
- | awk '{OFS=","} {print $1,$2,$3}' \
- | sed  "s/.$//g" | sed "s/.$//g" \
+ | awk '{OFS=" "} {print $1}' \
+ | sed 's/$/,/g' > tmp1.log
+paste -d "" tmp1.log batchcount.log > tmp2.log
+cat tmp2.log \
  | awk -F ',' 'OFS="," {print $1,$2,$4,$3}' \
  | sed 's/$/]/g' | sed 's/^/- Exact: [/g' >> NT.log
 
+cat $1 | grep  gemm_strided_batched  \
+ | grep "transposeA T --transposeB N" \
+ | awk -F ' --batch_count ' 'OFS="," {print $2}' \
+ | awk '{print $1}' > batchcount.log
 cat $1 | grep  gemm_strided_batched \
  | grep "transposeA T --transposeB N" \
  | awk -F ' -m ' '{print $2}' \
  | awk -F ' -n ' 'OFS="," {print $1,$2}' \
  | awk -F ' -k ' 'OFS="," {print $1,$2,$3}' \
- | awk '{print $1,$19}' \
- | awk '{OFS=","} {print $1,$2,$3}' \
- | sed  "s/.$//g" | sed "s/.$//g" \
+ | awk '{OFS=" "} {print $1}' \
+ | sed 's/$/,/g' > tmp1.log
+paste -d "" tmp1.log batchcount.log > tmp2.log
+cat tmp2.log \
  | awk -F ',' 'OFS="," {print $1,$2,$4,$3}' \
  | sed 's/$/]/g' | sed 's/^/- Exact: [/g' >> TN.log
 
+cat $1 | grep  gemm_strided_batched  \
+ | grep "transposeA T --transposeB T" \
+ | awk -F ' --batch_count ' 'OFS="," {print $2}' \
+ | awk '{print $1}' > batchcount.log
 cat $1 | grep  gemm_strided_batched \
  | grep "transposeA T --transposeB T" \
  | awk -F ' -m ' '{print $2}' \
  | awk -F ' -n ' 'OFS="," {print $1,$2}' \
  | awk -F ' -k ' 'OFS="," {print $1,$2,$3}' \
- | awk '{print $1,$19}' \
- | awk '{OFS=","} {print $1,$2,$3}' \
- | sed  "s/.$//g" | sed "s/.$//g" \
+ | awk '{OFS=" "} {print $1}' \
+ | sed 's/$/,/g' > tmp1.log
+paste -d "" tmp1.log batchcount.log > tmp2.log
+cat tmp2.log \
  | awk -F ',' 'OFS="," {print $1,$2,$4,$3}' \
  | sed 's/$/]/g' | sed 's/^/- Exact: [/g' >> TT.log
 
-
+rm -rf batchcount.log tmp1.log tmp2.log
