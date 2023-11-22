@@ -247,7 +247,7 @@ BenchmarkProblems:
         - WaveSeparateGlobalReadA: [1]
         - WaveSeparateGlobalReadB: [1]
         - MaxOccupancy: [1]
-        # - 1LDSBuffer: [0, 1]
+        - 1LDSBuffer: [-1]
         - GlobalSplitU: [1, 2]
         - GlobalSplitUAlgorithm: ["MultipleBuffer"]
         - GlobalReadPerMfma: [1]
