@@ -9,7 +9,7 @@ GlobalParameters:
   CSVMergeSameProblemID: 1
   Device: 0
   MaxWorkspaceSize: 3355443200
-  NumWarmups: 10
+  NumWarmups: 6
 #  MinKForGSU: 128
 
 BenchmarkProblems:
@@ -232,10 +232,10 @@ BenchmarkProblems:
         - ScheduleIterAlg: [3]
         - InnerUnroll: [1]
         - ExpandPointerSwap: [1]
-        - TransposeLDS: [1]
-        - LdsBlockSizePerPad: [-1]
-        - LdsPadA: [-1]
-        - LdsPadB: [-1]
+        # - TransposeLDS: [1]
+        # - LdsBlockSizePerPad: [-1]
+        # - LdsPadA: [-1]
+        # - LdsPadB: [-1]
         # - StaggerUStride: [128,256]
         - StaggerU: [4, 32]
         # - WorkGroupMapping: [1,2,8]
@@ -243,7 +243,7 @@ BenchmarkProblems:
         - WaveSeparateGlobalReadA: [1]
         - WaveSeparateGlobalReadB: [1]
         - MaxOccupancy: [1]
-        - 1LDSBuffer: [0, 1]
+        # - 1LDSBuffer: [0, 1]
         - GlobalSplitU: [1, 2]
         - GlobalSplitUAlgorithm: ["MultipleBuffer"]
         - GlobalReadPerMfma: [1]
