@@ -157,7 +157,7 @@ globalParameters["DataInitTypeAlpha"] = 2
 globalParameters["DataInitTypeBeta"] = 2
 globalParameters["DataInitTypeBias"] = 3
 globalParameters["DataInitTypeScaleDVec"] = 3
-globalParameters["DataInitValueActivationArgs"] = [2.0, 2.0]
+globalParameters["DataInitValueActivationArgs"] = [1.0, 1.0]
 globalParameters["CEqualD"] = False               # Set to true if testing for the case where the pointer to C is the same as D.
 # When this parameter is set to 0, the Tensile client will use srand(time(NULL)).
 # If not 0 the Tensile client will use srand(seed).

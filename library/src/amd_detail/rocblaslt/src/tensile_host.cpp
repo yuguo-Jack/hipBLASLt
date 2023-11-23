@@ -161,6 +161,14 @@ namespace
         case ROCBLASLT_EPILOGUE_RELU_BIAS:
             return Tensile::ActivationType::Relu;
             break;
+        case ROCBLASLT_EPILOGUE_SIGMOID:
+        case ROCBLASLT_EPILOGUE_SIGMOID_BIAS:
+            return Tensile::ActivationType::Sigmoid;
+            break;
+        case ROCBLASLT_EPILOGUE_TANH:
+        case ROCBLASLT_EPILOGUE_TANH_BIAS:
+            return Tensile::ActivationType::Tanh;
+            break;
         case ROCBLASLT_EPILOGUE_GELU:
         case ROCBLASLT_EPILOGUE_GELU_BIAS:
         case ROCBLASLT_EPILOGUE_GELU_AUX:
@@ -751,8 +759,8 @@ namespace
         inputs.scaleDVec = reinterpret_cast<const void*>(prob.scaleDVec);
 
         // push 2 activation arguments
-        inputs.activationArgs.push_back(static_cast<Tensile_Talpha_beta>(0.0f));
-        inputs.activationArgs.push_back(static_cast<Tensile_Talpha_beta>(0.0f));
+        inputs.activationArgs.push_back(static_cast<Tensile_Talpha_beta>(1.0f));
+        inputs.activationArgs.push_back(static_cast<Tensile_Talpha_beta>(1.0f));
 
         // alpha and beta are stored by value in Tensile::TypedContractionInputs
         // alpha and beta are copied from host to Tensile::TypedContractionInputs
