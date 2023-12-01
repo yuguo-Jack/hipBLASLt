@@ -1,0 +1,26 @@
+参考：
+A: (batchsize, in_feature)  ==  tensor in/grad: [batchsize, in_feature]
+B: (out_feature, in_feature)  ==  tensor weight/grad: [out_feature, in_feature]  -->  (need transpose)
+bias: out_feature  ==  tensor bias/grad: [out_feature]
+C: (batchsize, out_feature) == tensor out/grad: [batchsize, out_feature]
+
+由于调用rocblas内存排布都为列主序，为了避免输出转置: 均采用C^T=B^T*A^T的方式
+
+                                          transA,   transB,       M,N,K
+前向：
+out=in*weight^T  
+--> out^T=weight*in^T  -->               weight T,   in  N,      out_feature,batchsize,in_feature
+            
+
+反向: 
+wight_grad=out_grad^T*in  
+--> wight_grad^T=in^T*out_grad  -->       in    N,   out_grad T,  in_feature,out_feature,batchsize
+
+
+in_grad=out_grad*wight
+--> in_grad^T=wight^T*out_grad^T  -->      wight N,  out_grad N,  in_feature,batchsize,out_feature
+ 
+
+tran_yaml:
+- Exact: [M, N, B, K]
+
